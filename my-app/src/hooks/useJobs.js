@@ -13,28 +13,28 @@ export default function useJobs() {
   const [lastFilters, setLastFilters] = useState({});
 
   async function search(filters = {}, pageToLoad = 1) {
-    setLoading(true);
-    setError(null);
-
-    const limit = 25; // jobs per page
-
     try {
-      const data = await searchJobs({
+      setLoading(true);
+      setError(null);
+
+      const mergedFilters = {
         ...filters,
         page: pageToLoad,
-        limit,
-      });
+      };
 
-      // If backend returns array (non-paginated), still handle it
-      const results = Array.isArray(data) ? data : data.jobs || [];
+      const data = await searchJobs(mergedFilters);
 
-      setJobs(results);
-      setPage(data.page || pageToLoad);
+      setJobs(data.jobs || []);
+      setPage(data.page || 1);
       setTotalPages(data.totalPages || 1);
-      setTotal(data.total || results.length);
+      setTotal(data.total || 0);
       setLastFilters(filters);
     } catch (err) {
+      console.error("Error searching jobs:", err);
       setError(err.message || "Failed to load jobs");
+      setJobs([]);
+      setTotal(0);
+      setTotalPages(1);
     } finally {
       setLoading(false);
     }

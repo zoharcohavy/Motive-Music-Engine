@@ -1,3 +1,4 @@
+// server/models/Job.js
 import mongoose from "mongoose";
 
 const jobSchema = new mongoose.Schema(
@@ -22,7 +23,7 @@ const jobSchema = new mongoose.Schema(
     description: String,
     salary: Number,
 
-    postedAt: { type: Date, default: Date.now }
+    postedAt: { type: Date, default: Date.now },
   },
   { timestamps: true }
 );

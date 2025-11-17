@@ -1,3 +1,4 @@
+// server/server.js
 import express from "express";
 import mongoose from "mongoose";
 import cors from "cors";
@@ -6,13 +7,12 @@ import jobsRouter from "./routes/jobs.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
-// Make __dirname work in ES modules
+// So we can build an absolute path to .env
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Always load server/.env, no matter where node is run from
+// Always load server/.env
 dotenv.config({ path: path.join(__dirname, ".env") });
-
 
 const app = express();
 
@@ -22,10 +22,11 @@ app.use(express.json());
 const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/jobsdb";
 const PORT = process.env.PORT || 8080;
 
-// Connect to MongoDB
 mongoose
   .connect(MONGO_URI)
-  .then(() => console.log("✅ MongoDB connected"))
+  .then(() => {
+    console.log("✅ Connected to MongoDB");
+  })
   .catch((err) => {
     console.error("Mongo connection error:", err);
     process.exit(1);
