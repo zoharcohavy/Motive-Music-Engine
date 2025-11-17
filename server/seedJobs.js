@@ -1,9 +1,16 @@
-// server/seedJobs.js
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import Job from "./models/Job.js";
+import path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config();
+// Make __dirname work in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Always load server/.env
+dotenv.config({ path: path.join(__dirname, ".env") });
+
 
 const MONGO_URI = process.env.MONGO_URI ||
   "mongodb+srv://<user>:<pass>@cluster0.xxxxx.mongodb.net/jobsdb?retryWrites=true&w=majority";
