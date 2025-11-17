@@ -1,73 +1,85 @@
 import { useState } from "react";
-
+import "./SearchBar.css";
 
 export default function SearchBar({ onSearch }) {
-const [query, setQuery] = useState("");
-const [jobType, setJobType] = useState("");
-const [experience, setExperience] = useState("");
-const [datePosted, setDatePosted] = useState("");
-const [sort, setSort] = useState("relevance");
+  const [query, setQuery] = useState("");
+  const [jobType, setJobType] = useState("");
+  const [experience, setExperience] = useState("");
+  const [datePosted, setDatePosted] = useState("");
+  const [sort, setSort] = useState("relevance");
 
+  const handleSubmit = (e) => {
+    e.preventDefault();
 
-const handleSubmit = (e) => {
-e.preventDefault();
+    // Build a filters object to send to the parent
+    const filters = {
+      query,
+      jobType,
+      experience,
+      datePosted,
+      sort,
+    };
 
+    // Call the function from the parent (SearchPage)
+    onSearch(filters);
+  };
 
-onSearch({
-query,
-jobType,
-experience,
-datePosted,
-sort,
-});
-};
+  return (
+    <div className="search-bar">
+      <form onSubmit={handleSubmit}>
+        {/* Main search text */}
+        <input
+          type="text"
+          placeholder="Search job titles, companies, or keywords…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
 
+        {/* Job type filter */}
+        <select
+          value={jobType}
+          onChange={(e) => setJobType(e.target.value)}
+        >
+          <option value="">Any type</option>
+          <option value="full-time">Full-time</option>
+          <option value="part-time">Part-time</option>
+          <option value="contract">Contract</option>
+        </select>
 
-return (
-<form onSubmit={handleSubmit} className="search-bar">
-<div className="sb-row">
-<input
-type="text"
-placeholder="Search jobs (e.g. software engineer)"
-value={query}
-onChange={(e) => setQuery(e.target.value)}
-/>
-<button type="submit">Search</button>
-</div>
+        {/* Experience filter */}
+        <select
+          value={experience}
+          onChange={(e) => setExperience(e.target.value)}
+        >
+          <option value="">Any level</option>
+          <option value="entry">Entry</option>
+          <option value="mid">Mid</option>
+          <option value="senior">Senior</option>
+        </select>
 
+        {/* Date posted filter */}
+        <select
+          value={datePosted}
+          onChange={(e) => setDatePosted(e.target.value)}
+        >
+          <option value="">Any time</option>
+          <option value="1">Past 24 hours</option>
+          <option value="3">Last 3 days</option>
+          <option value="7">Last 7 days</option>
+        </select>
 
-<div className="sb-filters">
-<select value={jobType} onChange={(e) => setJobType(e.target.value)}>
-<option value="">Job Type</option>
-<option value="fulltime">Full-Time</option>
-<option value="parttime">Part-Time</option>
-<option value="contract">Contract</option>
-<option value="internship">Internship</option>
-</select>
+        {/* Sort */}
+        <select
+          value={sort}
+          onChange={(e) => setSort(e.target.value)}
+        >
+          <option value="relevance">Sort: Relevance</option>
+          <option value="date">Sort: Newest</option>
+          <option value="salary">Sort: Salary</option>
+        </select>
 
-
-<select value={experience} onChange={(e) => setExperience(e.target.value)}>
-<option value="">Experience</option>
-<option value="entry">Entry Level</option>
-<option value="mid">Mid Level</option>
-<option value="senior">Senior Level</option>
-</select>
-
-
-<select value={datePosted} onChange={(e) => setDatePosted(e.target.value)}>
-<option value="">Date Posted</option>
-<option value="1">Past 24 hours</option>
-<option value="3">Last 3 days</option>
-<option value="7">Last 7 days</option>
-</select>
-
-
-<select value={sort} onChange={(e) => setSort(e.target.value)}>
-<option value="relevance">Sort: Relevance</option>
-<option value="date">Sort: Newest</option>
-<option value="salary">Sort: Salary</option>
-</select>
-</div>
-</form>
-);
+        <button type="submit">Search</button>
+      </form>
+    </div>
+  );
 }
