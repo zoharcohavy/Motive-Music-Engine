@@ -4,7 +4,16 @@ import Job from "../models/Job.js";
 
 const router = express.Router();
 
-// GET /api/jobs/search
+/**
+ * GET /api/jobs/search
+ * Query params:
+ *  - query: text search (title/company/location/summary/description)
+ *  - jobType: "full-time" | "part-time" | "contract"
+ *  - experience: "entry" | "mid" | "senior"
+ *  - datePosted: number of days back (e.g. 7 = last week)
+ *  - sort: "relevance" | "date" | "salary"
+ *  - page: 1-based page index
+ */
 router.get("/search", async (req, res) => {
   try {
     const {
@@ -12,31 +21,35 @@ router.get("/search", async (req, res) => {
       jobType,
       experience,
       datePosted,
-      sort,
+      sort = "relevance",
       page = "1",
     } = req.query;
 
     const mongoQuery = {};
 
-    // Text search on title/company/description
-    if (query) {
-      const regex = new RegExp(query, "i");
+    // Text search
+    if (query && query.trim() !== "") {
+      const regex = new RegExp(query.trim(), "i");
       mongoQuery.$or = [
         { title: regex },
         { company: regex },
+        { location: regex },
+        { summary: regex },
         { description: regex },
       ];
     }
 
-    if (jobType) {
+    // Job type filter
+    if (jobType && jobType !== "any") {
       mongoQuery.jobType = jobType;
     }
 
-    if (experience) {
+    // Experience filter
+    if (experience && experience !== "any") {
       mongoQuery.experience = experience;
     }
 
-    // datePosted = "1", "3", "7" (days back)
+    // Posted within last X days
     if (datePosted) {
       const days = parseInt(datePosted, 10);
       if (!Number.isNaN(days)) {
@@ -46,55 +59,62 @@ router.get("/search", async (req, res) => {
       }
     }
 
-    // 🔹 Pagination
+    // Pagination: 25 per page
     const pageNum = Math.max(parseInt(page, 10) || 1, 1);
-    const limitNum = 25; // 25 jobs per page, hard-coded
+    const pageSize = 25;
+    const skip = (pageNum - 1) * pageSize;
 
-    // 🔹 Sorting
+    // Sorting
     let sortOption = {};
     if (sort === "date") sortOption = { postedAt: -1 };
     else if (sort === "salary") sortOption = { salary: -1 };
-    else sortOption = { postedAt: -1 }; // default
+    else sortOption = { createdAt: -1 }; // "relevance" fallback
 
-    const total = await Job.countDocuments(mongoQuery);
+    const [jobs, total] = await Promise.all([
+      Job.find(mongoQuery)
+        .sort(sortOption)
+        .skip(skip)
+        .limit(pageSize)
+        .lean(),
+      Job.countDocuments(mongoQuery),
+    ]);
 
-    const jobs = await Job.find(mongoQuery)
-      .sort(sortOption)
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean();
+    const totalPages = Math.max(Math.ceil(total / pageSize), 1);
 
-    const withId = jobs.map((job) => ({
+    const jobsWithId = jobs.map((job) => ({
       ...job,
       id: job._id.toString(),
     }));
 
     res.json({
-      jobs: withId,
-      total,
+      jobs: jobsWithId,
       page: pageNum,
-      totalPages: Math.max(Math.ceil(total / limitNum), 1),
+      totalPages,
+      total,
+      pageSize,
     });
   } catch (err) {
-    console.error("Error in /api/jobs/search:", err);
+    console.error("Error in GET /api/jobs/search:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-// GET /api/jobs/:id
+/**
+ * GET /api/jobs/:id
+ * Single job detail
+ */
 router.get("/:id", async (req, res) => {
   try {
     const job = await Job.findById(req.params.id).lean();
     if (!job) {
       return res.status(404).json({ message: "Job not found" });
     }
-
     res.json({
       ...job,
       id: job._id.toString(),
     });
   } catch (err) {
-    console.error("Error in /api/jobs/:id:", err);
+    console.error("Error in GET /api/jobs/:id:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
