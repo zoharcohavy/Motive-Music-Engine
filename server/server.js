@@ -3,8 +3,16 @@ import mongoose from "mongoose";
 import cors from "cors";
 import dotenv from "dotenv";
 import jobsRouter from "./routes/jobs.js";
+import path from "path";
+import { fileURLToPath } from "url";
 
-dotenv.config();
+// Make __dirname work in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Always load server/.env, no matter where node is run from
+dotenv.config({ path: path.join(__dirname, ".env") });
+
 
 const app = express();
 
