@@ -1,0 +1,25 @@
+.search-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .search-bar form {
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .search-bar input {
+    flex: 1;
+    padding: 0.5rem;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+  }
+  
+  .search-bar button {
+    padding: 0.5rem 1rem;
+    background-color: #0366d6;
+    color: white;
+    border-radius: 6px;
+    cursor: pointer;
+  }  

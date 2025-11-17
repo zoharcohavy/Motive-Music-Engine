@@ -1,0 +1,14 @@
+:root{ --accent: #0366d6 }
+body{ font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin:0; color:#111 }
+.app-root{ max-width:1100px; margin:0 auto; padding:16px }
+.topbar{ display:flex; justify-content:space-between; align-items:center }
+.logo{ font-weight:700; text-decoration:none; color:var(--accent) }
+.search-bar{ background:#fff; padding:12px; border-radius:8px; box-shadow:0 1px 4px rgba(0,0,0,0.06) }
+.sb-row{ display:flex; gap:8px }
+.sb-row input{ flex:1; padding:8px }
+.sb-row button{ padding:8px 12px }
+.sb-filters{ display:flex; gap:8px; margin-top:8px; flex-wrap:wrap }
+.job-card{ padding:12px; border-bottom:1px solid #eee }
+.muted{ color:#666; font-size:0.95rem }
+.page-container{ padding-top:16px }
+.error{ color:crimson }
