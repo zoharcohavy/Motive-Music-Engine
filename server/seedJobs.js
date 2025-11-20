@@ -1,114 +1,71 @@
+import axios from "axios";
+import * as cheerio from "cheerio";
 import mongoose from "mongoose";
-import dotenv from "dotenv";
 import Job from "./models/Job.js";
-import path from "path";
-import { fileURLToPath } from "url";
+import "dotenv/config.js";
 
-// Make __dirname work in ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+async function scrapeIndeedJobs(query = "software engineer", location = "Los Angeles, CA") {
+  const url = `https://www.indeed.com/jobs?q=${encodeURIComponent(
+    query
+  )}&l=${encodeURIComponent(location)}&radius=25`;
 
-// Always load server/.env
-dotenv.config({ path: path.join(__dirname, ".env") });
+  console.log("Fetching:", url);
 
+  const { data } = await axios.get(url, {
+    headers: {
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+  });
 
-const MONGO_URI = process.env.MONGO_URI ||
-  "mongodb+srv://<user>:<pass>@cluster0.xxxxx.mongodb.net/jobsdb?retryWrites=true&w=majority";
+  const $ = cheerio.load(data);
+  const jobs = [];
 
-const TITLES = [
-  "Junior Frontend Developer",
-  "Senior Backend Engineer",
-  "Data Analyst",
-  "Part-Time QA Tester",
-  "DevOps Engineer",
-  "Machine Learning Engineer",
-  "IT Support Specialist",
-  "UI/UX Designer",
-  "Full-Stack Developer",
-  "Product Manager",
-];
+  $(".job_seen_beacon").each((i, elem) => {
+    const title = $(elem).find("h2.jobTitle span").first().text().trim();
+    const company = $(elem).find(".companyName").text().trim();
+    const location = $(elem).find(".companyLocation").text().trim();
+    const summary = $(elem).find(".job-snippet").text().trim();
+    const relativeLink = $(elem).find("a").attr("href");
+    const link = relativeLink ? `https://www.indeed.com${relativeLink}` : null;
 
-const COMPANIES = [
-  "TechGen",
-  "CloudWorks",
-  "Insight Analytics",
-  "BugSquashers",
-  "DeployHQ",
-  "AI Labs",
-  "HelpDesk Co",
-  "PixelPerfect Studio",
-  "StackForge",
-  "BrightPath",
-];
+    if (title && company) {
+      jobs.push({
+        title,
+        company,
+        location,
+        summary,
+        link,
+      });
+    }
+  });
 
-const LOCATIONS = [
-  "Remote",
-  "Los Angeles, CA",
-  "New York, NY",
-  "San Francisco, CA",
-  "Boston, MA",
-  "Dallas, TX",
-  "Seattle, WA",
-  "Chicago, IL",
-];
-
-const JOB_TYPES = ["full-time", "part-time", "contract"];
-const EXPERIENCES = ["entry", "mid", "senior"];
-
-function buildDescription(title, company) {
-  return `As a ${title} at ${company}, you will collaborate with a cross-functional team to build, test, and maintain modern applications. You will participate in code reviews, write clean and maintainable code, and help improve existing systems.`;
+  return jobs;
 }
 
 async function run() {
   try {
-    await mongoose.connect(MONGO_URI);
-    console.log("✅ Connected to MongoDB");
+    console.log("Connecting to MongoDB...");
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log("Connected.");
 
-    await Job.deleteMany({});
-    console.log("🧹 Cleared existing jobs");
+    console.log("Scraping Indeed...");
+    const jobs = await scrapeIndeedJobs("software engineer", "Los Angeles, CA");
 
-    const jobs = [];
-    const totalJobs = 200;
+    console.log(`Scraped ${jobs.length} jobs.`);
 
-    for (let i = 0; i < totalJobs; i++) {
-      const title = TITLES[i % TITLES.length];
-      const company = COMPANIES[i % COMPANIES.length];
-      const location = LOCATIONS[i % LOCATIONS.length];
-      const jobType = JOB_TYPES[i % JOB_TYPES.length];
-      const experience = EXPERIENCES[i % EXPERIENCES.length];
-
-      const baseSalary =
-        experience === "entry"
-          ? 55000
-          : experience === "mid"
-          ? 90000
-          : 130000;
-
-      const salary = baseSalary + (i % 10) * 2500; // tiny variation
-
-      const daysAgo = i % 30; // posted within last 30 days
-      const postedAt = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
-
-      jobs.push({
-        title: `${title} #${Math.floor(i / TITLES.length) + 1}`,
-        company,
-        location,
-        jobType,
-        experience,
-        summary: `${experience.toUpperCase()} level ${jobType} role in ${location}`,
-        description: buildDescription(title, company),
-        salary,
-        postedAt,
-      });
+    if (jobs.length > 0) {
+      await Job.insertMany(jobs);
+      console.log("Jobs inserted into DB.");
+    } else {
+      console.log("No jobs found.");
     }
-
-    const inserted = await Job.insertMany(jobs);
-    console.log(`✅ Inserted ${inserted.length} jobs`);
   } catch (err) {
-    console.error("Seed error:", err);
+    console.error("ERROR:", err.message);
   } finally {
     await mongoose.disconnect();
-    process.exit();
+    console.log("Disconnected.");
   }
 }
 
