@@ -31,6 +31,11 @@ export default function SearchPage() {
   return (
     <div className="page-container">
       <h1>Job Search</h1>
+      <div style={{ marginBottom: "1rem" }}>
+        <Link to="/tone-test">
+          <button>Go to 400 Hz Test Tone</button>
+        </Link>
+      </div>
 
       <SearchBar onSearch={handleSearch} />
 
