@@ -35,6 +35,9 @@ export default function SearchPage() {
         <Link to="/tone-test">
           <button>Go to 400 Hz Test Tone</button>
         </Link>
+        <Link to="/">
+          <button>Back to Home</button>
+        </Link>
       </div>
 
       <SearchBar onSearch={handleSearch} />
