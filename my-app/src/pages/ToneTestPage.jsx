@@ -76,12 +76,14 @@ export default function ToneTestPage() {
       recordingDuration: 0,
       tapeHeadPos: 0, // 0..1
       recordingImage: null,
+      zoom: 1, // 🔹 NEW: per-track zoom value
     },
   ]);
+
   const [nextTrackId, setNextTrackId] = useState(1);
   const [activeRecordingTrackId, setActiveRecordingTrackId] = useState(null);
   const [selectedTrackId, setSelectedTrackId] = useState(0);
-
+const [mouseMode, setMouseMode] = useState("head");
   const activeRecordingTrackIdRef = useRef(null);
 
   useEffect(() => {
@@ -373,6 +375,10 @@ export default function ToneTestPage() {
 
         ctx.fillStyle = "#111";
         ctx.fillRect(0, 0, width, height);
+        // 🔍 zoom affects how many seconds fit in this strip
+        const zoom = track.zoom || 1;
+        const baseDuration = 10;        // seconds visible at 1x zoom
+        const maxDuration = baseDuration / zoom; // more zoom out -> more seconds visible
 
         const isRecordingThisTrack =
           activeRecordingTrackIdRef.current === track.id &&
@@ -382,9 +388,10 @@ export default function ToneTestPage() {
         if (isRecordingThisTrack) {
           // tape head based on elapsed time
           const elapsedSec = (now - recordStartTimeRef.current) / 1000;
-          const maxDuration = 10; // 10 seconds to fill full strip
-          const headPos = Math.min(1, elapsedSec / maxDuration);
+          const headTime = elapsedSec; // seconds since recording started
+          const headPos = Math.min(1, headTime / maxDuration);
           const headX = headPos * width;
+
 
           // draw "printed" waveform behind the head using analyser data
           if (analyser) {
@@ -425,12 +432,19 @@ export default function ToneTestPage() {
           ctx.stroke();
         } else if (track.hasRecording) {
           // draw the frozen tape image if we have one; otherwise a generic wave
+          let clipWidth = width;
+
           if (track.recordingImage) {
             const img = new Image();
             img.src = track.recordingImage;
             // draw immediately; dataURL should decode quickly
             try {
-              ctx.drawImage(img, 0, 0, width, height);
+              const recordingDuration = track.recordingDuration || baseDuration;
+              // fraction of the strip the recording should fill at this zoom
+              const fraction = Math.min(1, recordingDuration / maxDuration);
+              clipWidth = fraction * width;
+
+              ctx.drawImage(img, 0, 0, clipWidth, height);
             } catch (e) {
               drawGenericWave(ctx, width, height, 0.9);
             }
@@ -438,7 +452,17 @@ export default function ToneTestPage() {
             drawGenericWave(ctx, width, height, 0.9);
           }
 
-          const headX = (track.tapeHeadPos || 0) * width;
+          // tapeHeadPos is 0..1 of the *recording duration*
+          // convert that to actual seconds:
+          let headX = 0;
+          if (track.recordingDuration) {
+            const tapeTime =
+              (track.tapeHeadPos || 0) * track.recordingDuration; // seconds
+            const headTimePos = Math.min(1, tapeTime / maxDuration);
+            headX = headTimePos * width;
+          } else {
+            headX = (track.tapeHeadPos || 0) * width;
+          }
 
           // subtle "played" region
           ctx.fillStyle = "rgba(255,255,255,0.04)";
@@ -451,6 +475,7 @@ export default function ToneTestPage() {
           ctx.moveTo(headX, 0);
           ctx.lineTo(headX, height);
           ctx.stroke();
+
         } else {
           // no recording: subtle hatch pattern
           ctx.fillStyle = "#222";
@@ -544,10 +569,62 @@ export default function ToneTestPage() {
         recordingDuration: 0,
         tapeHeadPos: 0,
         recordingImage: null,
+        zoom: 1, // 🔹 NEW: new tracks also start at 1x zoom
       },
     ]);
     setNextTrackId((id) => id + 1);
   };
+
+    // 🔹 Change zoom for a specific track
+  const changeTrackZoom = (trackId, delta) => {
+    setTracks((prev) =>
+      prev.map((track) =>
+        track.id === trackId
+          ? {
+              ...track,
+              zoom: Math.min(4, Math.max(0.25, (track.zoom || 1) + delta)),
+            }
+          : track
+      )
+    );
+  };
+
+  // 🔹 Move an entire recording (audio box) from one track to another
+  const moveTrackRecording = (fromTrackId, toTrackId) => {
+    if (fromTrackId === toTrackId) return;
+
+    setTracks((prev) => {
+      const fromTrack = prev.find((t) => t.id === fromTrackId);
+      if (!fromTrack || !fromTrack.hasRecording) return prev;
+
+      return prev.map((track) => {
+        if (track.id === fromTrackId) {
+          // Clear the source track
+          return {
+            ...track,
+            hasRecording: false,
+            recordingUrl: null,
+            recordingDuration: 0,
+            tapeHeadPos: 0,
+            recordingImage: null,
+          };
+        }
+        if (track.id === toTrackId) {
+          // Copy recording metadata to the target track
+          return {
+            ...track,
+            hasRecording: true,
+            recordingUrl: fromTrack.recordingUrl,
+            recordingDuration: fromTrack.recordingDuration,
+            tapeHeadPos: fromTrack.tapeHeadPos,
+            recordingImage: fromTrack.recordingImage,
+          };
+        }
+        return track;
+      });
+    });
+  };
+
 
   const handleGlobalPlay = () => {
     const t = tracksRef.current.find(
@@ -674,6 +751,38 @@ export default function ToneTestPage() {
           }}
         />
       </div>
+      {/* 🔹 Mouse mode toggle: tape head vs moving recordings */}
+      <div
+        style={{
+          marginTop: "0.5rem",
+          marginBottom: "0.25rem",
+          fontSize: "0.8rem",
+          color: "#ccc",
+          display: "flex",
+          alignItems: "center",
+          gap: "0.75rem",
+        }}
+      >
+        <span style={{ fontWeight: 500 }}>Mouse mode:</span>
+        <label>
+          <input
+            type="radio"
+            checked={mouseMode === "head"}
+            onChange={() => setMouseMode("head")}
+            style={{ marginRight: "0.25rem" }}
+          />
+          Move tape head
+        </label>
+        <label>
+          <input
+            type="radio"
+            checked={mouseMode === "clips"}
+            onChange={() => setMouseMode("clips")}
+            style={{ marginRight: "0.25rem" }}
+          />
+          Move recordings between tracks
+        </label>
+      </div>
 
       {/* Recording tracks with per-track tape heads */}
       <div style={{ marginBottom: "0.75rem" }}>
@@ -720,33 +829,47 @@ export default function ToneTestPage() {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-          {tracks.map((track, index) => (
-            <div
-              key={track.id}
-              onClick={() => setSelectedTrackId(track.id)}
+                  {tracks.map((track, index) => (
+          <div
+            key={track.id}
+            onClick={() => setSelectedTrackId(track.id)}
+            style={{
+              borderRadius: "4px",
+              border:
+                selectedTrackId === track.id
+                  ? "2px solid #9cf"
+                  : "1px solid #555",
+              background: "#111",
+              padding: "0.3rem 0.4rem",
+              display: "flex",
+              alignItems: "center",
+              gap: "0.6rem",
+              cursor: "pointer",
+            }}
+          >
+            {/* Track label */}
+            <span
               style={{
-                borderRadius: "4px",
-                border:
-                  selectedTrackId === track.id ? "2px solid #9cf" : "1px solid #555",
-                background: "#111",
-                padding: "0.3rem 0.4rem",
-                display: "flex",
-                alignItems: "center",
-                gap: "0.6rem",
-                cursor: "pointer",
+                fontSize: "0.75rem",
+                color: "#aaa",
+                flexShrink: 0,
+                width: "70px",
               }}
             >
-              <span
-                style={{
-                  fontSize: "0.75rem",
-                  color: "#aaa",
-                  flexShrink: 0,
-                  width: "70px",
-                }}
-              >
-                Track {index + 1}
-              </span>
+              Track {index + 1}
+            </span>
 
+            {/* Record button + CLOCK + ZOOM controls in a column */}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: "0.25rem",
+                flexShrink: 0,
+              }}
+            >
+              {/* Record / Stop */}
               <button
                 onClick={() => handleTrackRecordToggle(track.id)}
                 style={{
@@ -761,7 +884,6 @@ export default function ToneTestPage() {
                   color: "#fff",
                   cursor: "pointer",
                   fontSize: "0.75rem",
-                  flexShrink: 0,
                 }}
               >
                 <span
@@ -778,47 +900,157 @@ export default function ToneTestPage() {
                 {activeRecordingTrackId === track.id ? "Stop" : "Record"}
               </button>
 
-              <div
-                onMouseDown={(e) => handleTrackStripMouseDown(track.id, e)}
-                onMouseMove={(e) => handleTrackStripMouseMove(track.id, e)}
-                style={{
-                  flexGrow: 1,
-                  height: "56px",
-                  borderRadius: "4px",
-                  border: "1px solid #555",
-                  backgroundColor: "#111",
-                  position: "relative",
-                  overflow: "hidden",
-                  cursor: track.hasRecording ? "pointer" : "default",
-                }}
-              >
-                <canvas
-                  ref={(el) => {
-                    trackCanvasRefs.current[track.id] = el;
-                  }}
-                  style={{
-                    width: "100%",
-                    height: "100%",
-                    display: "block",
-                  }}
-                />
-              </div>
-
+              {/* ⏱ CLOCK: tape-head time in seconds */}
               <span
                 style={{
                   fontSize: "0.7rem",
                   color: "#ccc",
-                  width: "50px",
-                  flexShrink: 0,
-                  textAlign: "right",
+                  minWidth: "60px",
+                  textAlign: "center",
                 }}
               >
                 {track.recordingDuration
-                  ? `${track.recordingDuration.toFixed(1)}s`
-                  : ""}
+                  ? `${(
+                      (track.tapeHeadPos || 0) * track.recordingDuration
+                    ).toFixed(2)}s`
+                  : "0.00s"}
               </span>
+
+              {/* 🔍 ZOOM controls for this track */}
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.25rem",
+                  fontSize: "0.7rem",
+                  color: "#aaa",
+                }}
+              >
+                <button
+                  onClick={() => changeTrackZoom(track.id, -0.25)}
+                  disabled={(track.zoom || 1) <= 0.25}
+                  style={{
+                    padding: "0.05rem 0.35rem",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    background: "#222",
+                    color: "#eee",
+                    cursor:
+                      (track.zoom || 1) <= 0.25 ? "not-allowed" : "pointer",
+                  }}
+                >
+                  −
+                </button>
+                <span>{(track.zoom || 1).toFixed(2)}x</span>
+                <button
+                  onClick={() => changeTrackZoom(track.id, +0.25)}
+                  disabled={(track.zoom || 1) >= 4}
+                  style={{
+                    padding: "0.05rem 0.35rem",
+                    borderRadius: "4px",
+                    border: "1px solid #444",
+                    background: "#222",
+                    color: "#eee",
+                    cursor:
+                      (track.zoom || 1) >= 4 ? "not-allowed" : "pointer",
+                  }}
+                >
+                  +
+                </button>
+              </div>
             </div>
-          ))}
+
+            {/* 🎞 Tape strip:
+                - in "head" mode: click/drag moves tape head
+                - in "clips" mode: drag/drop moves recordings between tracks */}
+            <div
+              onMouseDown={(e) => {
+                if (mouseMode === "head") {
+                  handleTrackStripMouseDown(track.id, e);
+                }
+              }}
+              onMouseMove={(e) => {
+                if (mouseMode === "head") {
+                  handleTrackStripMouseMove(track.id, e);
+                }
+              }}
+              draggable={mouseMode === "clips" && track.hasRecording}
+              onDragStart={(e) => {
+                if (mouseMode !== "clips" || !track.hasRecording) return;
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData(
+                  "application/json",
+                  JSON.stringify({ fromTrackId: track.id })
+                );
+              }}
+              onDragOver={(e) => {
+                if (mouseMode !== "clips") return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+              }}
+              onDrop={(e) => {
+                if (mouseMode !== "clips") return;
+                e.preventDefault();
+                try {
+                  const data = JSON.parse(
+                    e.dataTransfer.getData("application/json")
+                  );
+                  if (
+                    data &&
+                    typeof data.fromTrackId === "number" &&
+                    data.fromTrackId !== track.id
+                  ) {
+                    moveTrackRecording(data.fromTrackId, track.id);
+                  }
+                } catch {
+                  // ignore invalid drops
+                }
+              }}
+              style={{
+                flexGrow: 1,
+                height: "56px",
+                borderRadius: "4px",
+                border: "1px solid #555",
+                backgroundColor: "#111",
+                position: "relative",
+                overflow: "hidden",
+                cursor:
+                  mouseMode === "clips" && track.hasRecording
+                    ? "grab"
+                    : track.hasRecording
+                    ? "pointer"
+                    : "default",
+              }}
+            >
+              <canvas
+                ref={(el) => {
+                  trackCanvasRefs.current[track.id] = el;
+                }}
+                style={{
+                  width: "100%",
+                  height: "100%",
+                  display: "block",
+                }}
+              />
+            </div>
+
+            {/* (Optional) total recording length on the far right */}
+            <span
+              style={{
+                fontSize: "0.7rem",
+                color: "#ccc",
+                width: "50px",
+                flexShrink: 0,
+                textAlign: "right",
+              }}
+            >
+              {track.recordingDuration
+                ? `${track.recordingDuration.toFixed(1)}s`
+                : ""}
+            </span>
+          </div>
+        ))}
+
         </div>
       </div>
 
