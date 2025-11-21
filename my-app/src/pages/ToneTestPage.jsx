@@ -1,18 +1,4 @@
-// src/pages/ToneTestPage.jsx
 import { useRef, useState, useEffect } from "react";
-
-// Vintage waveform images
-import sineImg from "../assets/waves/sine.png";
-import squareImg from "../assets/waves/square.png";
-import triangleImg from "../assets/waves/triangle.png";
-import sawImg from "../assets/waves/sawtooth.png";
-
-const WAVE_IMAGES = {
-  sine: sineImg,
-  square: squareImg,
-  triangle: triangleImg,
-  sawtooth: sawImg,
-};
 
 const API_BASE = "http://localhost:8080";
 
@@ -33,6 +19,25 @@ function generateKeys() {
 
 const KEYS = generateKeys();
 
+// Helper: draw a generic “tape” waveform into a canvas
+function drawGenericWave(ctx, width, height, intensity = 1) {
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = `rgba(200, 200, 200, ${0.7 * intensity})`;
+  ctx.beginPath();
+  const steps = 300;
+  for (let i = 0; i <= steps; i++) {
+    const x = (i / steps) * width;
+    const t = (i / steps) * Math.PI * 4;
+    const y =
+      height / 2 +
+      Math.sin(t) * (height * 0.25 * intensity) +
+      (Math.random() - 0.5) * (height * 0.06 * intensity);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+}
+
 export default function ToneTestPage() {
   const audioCtxRef = useRef(null);
   const analyserRef = useRef(null);
@@ -45,18 +50,49 @@ export default function ToneTestPage() {
   const animationFrameRef = useRef(null);
 
   const waveCanvasRef = useRef(null);
-  const recordCanvasRef = useRef(null);
+
+  // Per-track tape canvases
+  const trackCanvasRefs = useRef({}); // { [trackId]: HTMLCanvasElement | null }
+
+  const recordingTargetTrackIdRef = useRef(null);
+  const recordStartTimeRef = useRef(null);
+  const recordDurationRef = useRef(0);
+
+  const currentAudioRef = useRef(null);
+  const draggingHeadTrackIdRef = useRef(null);
+
+  const tracksRef = useRef([]);
 
   const [waveform, setWaveform] = useState("sine");
   const [effect, setEffect] = useState("none"); // "none" or "reverb"
-  const [isRecording, setIsRecording] = useState(false);
   const [recordings, setRecordings] = useState([]);
   const [recordingsError, setRecordingsError] = useState(null);
-  const isRecordingRef = useRef(false);
+
+  const [tracks, setTracks] = useState([
+    {
+      id: 0,
+      hasRecording: false,
+      recordingUrl: null,
+      recordingDuration: 0,
+      tapeHeadPos: 0, // 0..1
+      recordingImage: null,
+    },
+  ]);
+  const [nextTrackId, setNextTrackId] = useState(1);
+  const [activeRecordingTrackId, setActiveRecordingTrackId] = useState(null);
+  const [selectedTrackId, setSelectedTrackId] = useState(0);
+
+  const activeRecordingTrackIdRef = useRef(null);
 
   useEffect(() => {
-    isRecordingRef.current = isRecording;
-  }, [isRecording]);
+    tracksRef.current = tracks;
+  }, [tracks]);
+
+  useEffect(() => {
+    activeRecordingTrackIdRef.current = activeRecordingTrackId;
+  }, [activeRecordingTrackId]);
+
+  // ---------- AUDIO SETUP ----------
 
   const setupAudioContext = () => {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -67,7 +103,7 @@ export default function ToneTestPage() {
     masterGain.gain.value = 0.9;
     masterGain.connect(ctx.destination);
 
-    // Analyser for waveform visualization
+    // Analyser for live waveform
     const analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
     masterGain.connect(analyser);
@@ -86,6 +122,48 @@ export default function ToneTestPage() {
       const blob = new Blob(recordingChunksRef.current, { type: "audio/wav" });
       recordingChunksRef.current = [];
 
+      const targetTrackId = recordingTargetTrackIdRef.current;
+      recordingTargetTrackIdRef.current = null;
+      setActiveRecordingTrackId(null);
+
+      const localUrl = URL.createObjectURL(blob);
+
+      if (recordStartTimeRef.current) {
+        recordDurationRef.current =
+          (performance.now() - recordStartTimeRef.current) / 1000;
+      }
+
+      // Capture the current tape canvas for this track as an image
+      let recordingImage = null;
+      if (targetTrackId != null && trackCanvasRefs.current[targetTrackId]) {
+        try {
+          recordingImage =
+            trackCanvasRefs.current[targetTrackId].toDataURL("image/png");
+        } catch (e) {
+          console.warn("Could not snapshot tape canvas", e);
+        }
+      }
+
+      // Apply recording to the correct track
+      if (targetTrackId != null) {
+        const duration = recordDurationRef.current || 0;
+        setTracks((prev) =>
+          prev.map((track) =>
+            track.id === targetTrackId
+              ? {
+                  ...track,
+                  hasRecording: true,
+                  recordingUrl: localUrl,
+                  recordingDuration: duration,
+                  tapeHeadPos: 0,
+                  recordingImage,
+                }
+              : track
+          )
+        );
+      }
+
+      // Upload to server
       try {
         const formData = new FormData();
         formData.append("audio", blob, "recording.wav");
@@ -95,13 +173,11 @@ export default function ToneTestPage() {
           body: formData,
         });
 
-        // Refresh list after upload
         fetchRecordings();
       } catch (err) {
         console.error("Upload failed:", err);
       }
     };
-
     audioCtxRef.current = ctx;
     analyserRef.current = analyser;
     masterGainRef.current = masterGain;
@@ -138,10 +214,12 @@ export default function ToneTestPage() {
     return convolverRef.current;
   };
 
+  // ---------- PLAYING NOTES ----------
+
   const playNote = (freq) => {
     const ctx = getAudioContext();
     const masterGain = masterGainRef.current;
-    if (!ctx || !masterGain) return;
+       if (!ctx || !masterGain) return;
 
     const oscillator = ctx.createOscillator();
     const gainNode = ctx.createGain();
@@ -178,6 +256,14 @@ export default function ToneTestPage() {
 
   const handleMouseUp = () => {
     isMouseDownRef.current = false;
+    const trackId = draggingHeadTrackIdRef.current;
+    if (trackId != null) {
+      draggingHeadTrackIdRef.current = null;
+      const t = tracksRef.current.find((tr) => tr.id === trackId);
+      if (t && t.hasRecording && t.recordingUrl) {
+        playTrackFromHead(t);
+      }
+    }
   };
 
   useEffect(() => {
@@ -187,13 +273,57 @@ export default function ToneTestPage() {
     };
   }, []);
 
-  // Waveform + recording visualization
+  // ---------- PER-TRACK TAPE HEAD & PLAYBACK ----------
+
+  const updateTrackTapeHeadFromEvent = (trackId, evt) => {
+    const rect = evt.currentTarget.getBoundingClientRect();
+    let pos = (evt.clientX - rect.left) / rect.width;
+    pos = Math.max(0, Math.min(1, pos));
+    setTracks((prev) =>
+      prev.map((track) =>
+        track.id === trackId ? { ...track, tapeHeadPos: pos } : track
+      )
+    );
+  };
+
+  const handleTrackStripMouseDown = (trackId, e) => {
+    if (!tracksRef.current.find((t) => t.id === trackId)?.hasRecording) {
+      return; // no recording yet – nothing to scrub
+    }
+    draggingHeadTrackIdRef.current = trackId;
+    updateTrackTapeHeadFromEvent(trackId, e);
+  };
+
+  const handleTrackStripMouseMove = (trackId, e) => {
+    if (draggingHeadTrackIdRef.current !== trackId) return;
+    updateTrackTapeHeadFromEvent(trackId, e);
+  };
+
+  const playTrackFromHead = (track) => {
+    if (!track || !track.recordingUrl) return;
+
+    const audio = new Audio(track.recordingUrl);
+    currentAudioRef.current = audio;
+    const startFrac = track.tapeHeadPos || 0;
+
+    audio.addEventListener("loadedmetadata", () => {
+      try {
+        audio.currentTime = startFrac * audio.duration;
+      } catch {}
+      audio.play().catch(() => {});
+    });
+
+    audio.play().catch(() => {});
+  };
+
+  // ---------- LIVE WAVEFORM + TAPE DRAWING LOOP ----------
+
   useEffect(() => {
     const draw = () => {
       const analyser = analyserRef.current;
       const waveCanvas = waveCanvasRef.current;
-      const recordCanvas = recordCanvasRef.current;
 
+      // Live oscilloscope
       if (analyser && waveCanvas) {
         const bufferLength = analyser.fftSize;
         const dataArray = new Uint8Array(bufferLength);
@@ -227,43 +357,114 @@ export default function ToneTestPage() {
         wctx.stroke();
       }
 
-      if (analyser && recordCanvas) {
-        const bufferLength = analyser.fftSize;
-        const dataArray = new Uint8Array(bufferLength);
-        analyser.getByteTimeDomainData(dataArray);
+      // Draw per-track “tape” strips
+      const tList = tracksRef.current;
+      const now = performance.now();
 
-        const rctx = recordCanvas.getContext("2d");
-        const width = recordCanvas.clientWidth;
-        const height = recordCanvas.clientHeight;
-        recordCanvas.width = width;
-        recordCanvas.height = height;
+      tList.forEach((track) => {
+        const canvas = trackCanvasRefs.current[track.id];
+        if (!canvas) return;
 
-        // background depends on recording state
-        if (isRecordingRef.current) {
-          rctx.fillStyle = "#400";
-        } else {
-          rctx.fillStyle = "#222";
-        }
-        rctx.fillRect(0, 0, width, height);
+        const ctx = canvas.getContext("2d");
+        const width = canvas.clientWidth;
+        const height = canvas.clientHeight;
+        canvas.width = width;
+        canvas.height = height;
 
-        rctx.lineWidth = 2;
-        rctx.strokeStyle = isRecordingRef.current ? "#ff5555" : "#888";
-        rctx.beginPath();
+        ctx.fillStyle = "#111";
+        ctx.fillRect(0, 0, width, height);
 
-        const sliceWidth = width / bufferLength;
-        let x = 0;
-        for (let i = 0; i < bufferLength; i++) {
-          const v = dataArray[i] / 128.0;
-          const y = (v * height) / 2;
-          if (i === 0) {
-            rctx.moveTo(x, y);
+        const isRecordingThisTrack =
+          activeRecordingTrackIdRef.current === track.id &&
+          recordingTargetTrackIdRef.current === track.id &&
+          recordStartTimeRef.current != null;
+
+        if (isRecordingThisTrack) {
+          // tape head based on elapsed time
+          const elapsedSec = (now - recordStartTimeRef.current) / 1000;
+          const maxDuration = 10; // 10 seconds to fill full strip
+          const headPos = Math.min(1, elapsedSec / maxDuration);
+          const headX = headPos * width;
+
+          // draw "printed" waveform behind the head using analyser data
+          if (analyser) {
+            const bufferLength = analyser.fftSize;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteTimeDomainData(dataArray);
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(0, 0, headX, height);
+            ctx.clip();
+
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "#ff9999";
+            ctx.beginPath();
+
+            const sliceWidth = width / bufferLength;
+            let x = 0;
+            for (let i = 0; i < bufferLength; i++) {
+              const v = dataArray[i] / 128.0;
+              const y = (v * height) / 2;
+              if (i === 0) ctx.moveTo(x, y);
+              else ctx.lineTo(x, y);
+              x += sliceWidth;
+            }
+            ctx.stroke();
+            ctx.restore();
           } else {
-            rctx.lineTo(x, y);
+            drawGenericWave(ctx, headX, height, 1);
           }
-          x += sliceWidth;
+
+          // white tape head line
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(headX, 0);
+          ctx.lineTo(headX, height);
+          ctx.stroke();
+        } else if (track.hasRecording) {
+          // draw the frozen tape image if we have one; otherwise a generic wave
+          if (track.recordingImage) {
+            const img = new Image();
+            img.src = track.recordingImage;
+            // draw immediately; dataURL should decode quickly
+            try {
+              ctx.drawImage(img, 0, 0, width, height);
+            } catch (e) {
+              drawGenericWave(ctx, width, height, 0.9);
+            }
+          } else {
+            drawGenericWave(ctx, width, height, 0.9);
+          }
+
+          const headX = (track.tapeHeadPos || 0) * width;
+
+          // subtle "played" region
+          ctx.fillStyle = "rgba(255,255,255,0.04)";
+          ctx.fillRect(0, 0, headX, height);
+
+          // tape head line
+          ctx.strokeStyle = "#ffffff";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(headX, 0);
+          ctx.lineTo(headX, height);
+          ctx.stroke();
+        } else {
+          // no recording: subtle hatch pattern
+          ctx.fillStyle = "#222";
+          ctx.fillRect(0, 0, width, height);
+          ctx.fillStyle = "#333";
+          for (let x = -height; x < width + height; x += 8) {
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x + height, height);
+            ctx.strokeStyle = "#333";
+            ctx.stroke();
+          }
         }
-        rctx.stroke();
-      }
+      });
 
       animationFrameRef.current = requestAnimationFrame(draw);
     };
@@ -275,6 +476,8 @@ export default function ToneTestPage() {
       }
     };
   }, []);
+
+  // ---------- RECORDINGS LIST (SERVER) ----------
 
   const fetchRecordings = async () => {
     try {
@@ -302,21 +505,59 @@ export default function ToneTestPage() {
     fetchRecordings();
   }, []);
 
-  const toggleRecording = () => {
+  // ---------- TRACK RECORDING CONTROL ----------
+
+  const handleTrackRecordToggle = (trackId) => {
     const ctx = getAudioContext();
     if (!ctx || !mediaRecorderRef.current) return;
 
-    if (isRecordingRef.current) {
-      // stop recording
+    // If this track is currently recording, stop
+    if (recordingTargetTrackIdRef.current === trackId) {
       mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    } else {
-      // start recording
-      recordingChunksRef.current = [];
-      mediaRecorderRef.current.start();
-      setIsRecording(true);
+      return;
     }
+
+    // If some other track is recording, ignore for now
+    if (
+      recordingTargetTrackIdRef.current != null &&
+      recordingTargetTrackIdRef.current !== trackId
+    ) {
+      return;
+    }
+
+    // Start recording for this track
+    recordingChunksRef.current = [];
+    recordStartTimeRef.current = performance.now();
+    recordDurationRef.current = 0;
+    recordingTargetTrackIdRef.current = trackId;
+    setActiveRecordingTrackId(trackId);
+    mediaRecorderRef.current.start();
   };
+
+  const addTrack = () => {
+    setTracks((prev) => [
+      ...prev,
+      {
+        id: nextTrackId,
+        hasRecording: false,
+        recordingUrl: null,
+        recordingDuration: 0,
+        tapeHeadPos: 0,
+        recordingImage: null,
+      },
+    ]);
+    setNextTrackId((id) => id + 1);
+  };
+
+  const handleGlobalPlay = () => {
+    const t = tracksRef.current.find(
+      (tr) => tr.id === selectedTrackId && tr.hasRecording && tr.recordingUrl
+    );
+    if (!t) return;
+    playTrackFromHead(t);
+  };
+
+  // ---------- RENDER ----------
 
   return (
     <div
@@ -326,7 +567,7 @@ export default function ToneTestPage() {
         flexDirection: "column",
         boxSizing: "border-box",
         padding: "1rem 1.5rem",
-        paddingBottom: "110px",
+        paddingBottom: "140px",
         fontFamily: "sans-serif",
         overflowX: "hidden",
         position: "relative",
@@ -377,7 +618,7 @@ export default function ToneTestPage() {
       <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
         <h1 style={{ margin: "0 0 0.25rem 0" }}>Waveform Piano</h1>
 
-        {/* Waveform + image */}
+        {/* Waveform selector */}
         <div
           style={{
             display: "flex",
@@ -398,20 +639,6 @@ export default function ToneTestPage() {
             <option value="triangle">Triangle</option>
             <option value="sawtooth">Sawtooth</option>
           </select>
-
-          <img
-            src={WAVE_IMAGES[waveform]}
-            alt={waveform}
-            style={{
-              width: "80px",
-              height: "40px",
-              objectFit: "contain",
-              border: "1px solid #ccc",
-              background: "white",
-              borderRadius: "4px",
-              padding: "4px",
-            }}
-          />
         </div>
 
         {/* Effect selector */}
@@ -426,18 +653,12 @@ export default function ToneTestPage() {
             <option value="reverb">Reverb</option>
           </select>
         </div>
-
-        <p style={{ margin: 0, maxWidth: "520px", fontSize: "0.85rem" }}>
-          Choose a waveform and effect, then click a key. You can also click and hold
-          and drag across the keys to hear multiple notes. Use the red record button
-          to capture your performance and see saved recordings in the top-right.
-        </p>
       </div>
 
       {/* Spacer */}
       <div style={{ flexGrow: 1 }} />
 
-      {/* Waveform visualizer bar */}
+      {/* Live waveform visualizer */}
       <div style={{ marginBottom: "0.75rem" }}>
         <div style={{ fontSize: "0.8rem", marginBottom: "0.25rem" }}>
           Live Waveform
@@ -454,102 +675,285 @@ export default function ToneTestPage() {
         />
       </div>
 
-      {/* Recording bar + record button */}
+      {/* Recording tracks with per-track tape heads */}
       <div style={{ marginBottom: "0.75rem" }}>
         <div
           style={{
             display: "flex",
+            justifyContent: "space-between",
             alignItems: "center",
-            gap: "1rem",
-            marginBottom: "0.25rem",
+            marginBottom: "0.5rem",
+            fontSize: "0.85rem",
           }}
         >
-          <span style={{ fontSize: "0.8rem" }}>
-            Recording {isRecording ? "(ON)" : "(OFF)"}
-          </span>
-          <button
-            onClick={toggleRecording}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.4rem",
-              padding: "0.3rem 0.7rem",
-              borderRadius: "999px",
-              border: "1px solid #444",
-              background: isRecording ? "#600" : "#222",
-              color: "#fff",
-              cursor: "pointer",
-            }}
-          >
-            <span
+          <span>Recording Tracks</span>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button
+              onClick={handleGlobalPlay}
               style={{
-                width: "12px",
-                height: "12px",
-                borderRadius: "50%",
-                background: isRecording ? "#ff4444" : "#aa0000",
+                padding: "0.2rem 0.6rem",
+                fontSize: "0.8rem",
+                borderRadius: "4px",
+                border: "1px solid #444",
+                background: "#2a2a2a",
+                color: "#fff",
+                cursor: "pointer",
               }}
-            />
-            <span style={{ fontSize: "0.8rem" }}>
-              {isRecording ? "Stop Recording" : "Record"}
-            </span>
-          </button>
+            >
+              ▶ Play Selected
+            </button>
+            <button
+              onClick={addTrack}
+              style={{
+                padding: "0.2rem 0.6rem",
+                fontSize: "0.8rem",
+                borderRadius: "4px",
+                border: "1px solid #444",
+                background: "#222",
+                color: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              + Add Track
+            </button>
+          </div>
         </div>
-        <canvas
-          ref={recordCanvasRef}
-          style={{
-            width: "100%",
-            height: "80px",
-            borderRadius: "6px",
-            border: "1px solid #444",
-            background: "#222",
-          }}
-        />
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+          {tracks.map((track, index) => (
+            <div
+              key={track.id}
+              onClick={() => setSelectedTrackId(track.id)}
+              style={{
+                borderRadius: "4px",
+                border:
+                  selectedTrackId === track.id ? "2px solid #9cf" : "1px solid #555",
+                background: "#111",
+                padding: "0.3rem 0.4rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.6rem",
+                cursor: "pointer",
+              }}
+            >
+              <span
+                style={{
+                  fontSize: "0.75rem",
+                  color: "#aaa",
+                  flexShrink: 0,
+                  width: "70px",
+                }}
+              >
+                Track {index + 1}
+              </span>
+
+              <button
+                onClick={() => handleTrackRecordToggle(track.id)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: "0.25rem 0.6rem",
+                  borderRadius: "999px",
+                  border: "1px solid #444",
+                  background:
+                    activeRecordingTrackId === track.id ? "#600" : "#222",
+                  color: "#fff",
+                  cursor: "pointer",
+                  fontSize: "0.75rem",
+                  flexShrink: 0,
+                }}
+              >
+                <span
+                  style={{
+                    width: "10px",
+                    height: "10px",
+                    borderRadius: "50%",
+                    background:
+                      activeRecordingTrackId === track.id
+                        ? "#ff4444"
+                        : "#aa0000",
+                  }}
+                />
+                {activeRecordingTrackId === track.id ? "Stop" : "Record"}
+              </button>
+
+              <div
+                onMouseDown={(e) => handleTrackStripMouseDown(track.id, e)}
+                onMouseMove={(e) => handleTrackStripMouseMove(track.id, e)}
+                style={{
+                  flexGrow: 1,
+                  height: "56px",
+                  borderRadius: "4px",
+                  border: "1px solid #555",
+                  backgroundColor: "#111",
+                  position: "relative",
+                  overflow: "hidden",
+                  cursor: track.hasRecording ? "pointer" : "default",
+                }}
+              >
+                <canvas
+                  ref={(el) => {
+                    trackCanvasRefs.current[track.id] = el;
+                  }}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    display: "block",
+                  }}
+                />
+              </div>
+
+              <span
+                style={{
+                  fontSize: "0.7rem",
+                  color: "#ccc",
+                  width: "50px",
+                  flexShrink: 0,
+                  textAlign: "right",
+                }}
+              >
+                {track.recordingDuration
+                  ? `${track.recordingDuration.toFixed(1)}s`
+                  : ""}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
-      {/* Piano keyboard fixed at the bottom */}
+      {/* Piano keyboard fixed at the bottom with white & black keys */}
       <div
         style={{
           position: "fixed",
           left: 0,
           right: 0,
           bottom: 0,
-          display: "flex",
-          alignItems: "flex-end",
           height: "90px",
           overflowX: "hidden",
           background: "#ddd",
         }}
       >
-        {KEYS.map((key, index) => (
-          <button
-            key={key.id}
-            onMouseDown={() => handleKeyMouseDown(key.freq)}
-            onMouseEnter={() => handleKeyMouseEnter(key.freq)}
-            style={{
-              width: `calc(100vw / ${KEYS.length})`,
-              minWidth: 0,
-              height: "100%",
-              borderTop: "1px solid #333",
-              borderBottom: "1px solid #333",
-              borderLeft: index === 0 ? "1px solid #333" : "0",
-              borderRight: "1px solid #333",
-              background: "white",
-              boxSizing: "border-box",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "flex-end",
-              alignItems: "center",
-              paddingBottom: "0.15rem",
-              cursor: "pointer",
-              userSelect: "none",
-              fontSize: "0.5rem",
-              overflow: "hidden",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {key.name}
-          </button>
-        ))}
+        <div
+          style={{
+            position: "relative",
+            width: "100%",
+            height: "100%",
+          }}
+        >
+          {/* White keys */}
+          {(() => {
+            const whiteKeys = [];
+            const blackKeys = [];
+            let whiteIndex = 0;
+
+            KEYS.forEach((key) => {
+              if (key.name.includes("#")) {
+                blackKeys.push({ ...key });
+              } else {
+                whiteKeys.push({ ...key, whiteIndex: whiteIndex });
+                whiteIndex += 1;
+              }
+            });
+
+            const totalWhites = whiteKeys.length;
+
+            return (
+              <>
+                {whiteKeys.map((key) => (
+                  <button
+                    key={key.id}
+                    onMouseDown={() => handleKeyMouseDown(key.freq)}
+                    onMouseEnter={() => handleKeyMouseEnter(key.freq)}
+                    style={{
+                      position: "absolute",
+                      left: `calc((100vw / ${totalWhites}) * ${key.whiteIndex})`,
+                      width: `calc(100vw / ${totalWhites})`,
+                      height: "100%",
+                      borderTop: "1px solid #333",
+                      borderBottom: "1px solid #333",
+                      borderLeft: key.whiteIndex === 0 ? "1px solid #333" : "0",
+                      borderRight: "1px solid #333",
+                      background: "white",
+                      boxSizing: "border-box",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "flex-end",
+                      alignItems: "center",
+                      paddingBottom: "0.15rem",
+                      cursor: "pointer",
+                      userSelect: "none",
+                      fontSize: "0.5rem",
+                      overflow: "hidden",
+                      whiteSpace: "nowrap",
+                      zIndex: 1,
+                    }}
+                  >
+                    {key.name.replace("#", "")}
+                  </button>
+                ))}
+
+                {/* Black keys */}
+                {(() => {
+                  const whiteIndexMap = new Map();
+                  let wIdx = 0;
+                  KEYS.forEach((key) => {
+                    if (!key.name.includes("#")) {
+                      whiteIndexMap.set(key.id, wIdx);
+                      wIdx += 1;
+                    }
+                  });
+
+                  const blackKeys = KEYS.filter((k) => k.name.includes("#"));
+
+                  return blackKeys.map((key) => {
+                    let leftWhiteIndex = 0;
+                    for (let i = key.id - 1; i >= 0; i--) {
+                      if (whiteIndexMap.has(i)) {
+                        leftWhiteIndex = whiteIndexMap.get(i);
+                        break;
+                      }
+                    }
+                    const offset = leftWhiteIndex + 0.7;
+
+                    return (
+                      <button
+                        key={`black-${key.id}`}
+                        onMouseDown={() => handleKeyMouseDown(key.freq)}
+                        onMouseEnter={() => handleKeyMouseEnter(key.freq)}
+                        style={{
+                          position: "absolute",
+                          left: `calc((100vw / ${wIdx}) * ${offset})`,
+                          width: `calc(100vw / ${wIdx})`,
+                          transform: "scaleX(0.6)",
+                          height: "60%",
+                          top: 0,
+                          border: "1px solid #222",
+                          background: "black",
+                          color: "white",
+                          boxSizing: "border-box",
+                          display: "flex",
+                          flexDirection: "column",
+                          justifyContent: "flex-end",
+                          alignItems: "center",
+                          paddingBottom: "0.15rem",
+                          cursor: "pointer",
+                          userSelect: "none",
+                          fontSize: "0.45rem",
+                          overflow: "hidden",
+                          whiteSpace: "nowrap",
+                          zIndex: 2,
+                        }}
+                      >
+                        {key.name}
+                      </button>
+                    );
+                  });
+                })()}
+              </>
+            );
+          })()}
+        </div>
       </div>
     </div>
   );
