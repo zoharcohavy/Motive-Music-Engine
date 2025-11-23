@@ -17,22 +17,19 @@ export function useToneTestLogic() {
   const recordingChunksRef = useRef([]);
   const isMouseDownRef = useRef(false);
   const animationFrameRef = useRef(null);
-
   const waveCanvasRef = useRef(null);
   const zoomRef = useRef(1);
-
   const trackCanvasRefs = useRef({}); // { [trackId]: HTMLCanvasElement | null }
-
   const recordingTargetTrackIdRef = useRef(null);
   const recordStartTimeRef = useRef(null);
   const recordDurationRef = useRef(0);
   const recordInitialHeadPosRef = useRef(0);
-
   const currentAudioRef = useRef(null);
   const draggingHeadTrackIdRef = useRef(null);
-
+  const draggingClipRef = useRef(null); // { trackId, clipId, offsetTime }
   const tracksRef = useRef([]);
   const activeRecordingTrackIdRef = useRef(null);
+
 
 
   // ---------- STATE ----------
@@ -540,6 +537,14 @@ if (targetTrackId != null) {
   const handleMouseUp = () => {
     isMouseDownRef.current = false;
     setActiveKeyIds([]);
+
+    // If we were dragging a clip, just end the drag and do nothing else
+    if (draggingClipRef.current) {
+      draggingClipRef.current = null;
+      return;
+    }
+
+    // Otherwise, if we were dragging the tape head, maybe scrub-play
     const trackId = draggingHeadTrackIdRef.current;
     if (trackId != null) {
       draggingHeadTrackIdRef.current = null;
@@ -549,6 +554,7 @@ if (targetTrackId != null) {
       }
     }
   };
+
 
   useEffect(() => {
     window.addEventListener("mouseup", handleMouseUp);
@@ -600,14 +606,136 @@ const updateTrackTapeHeadFromEvent = (trackId, evt) => {
 
 
   const handleTrackStripMouseDown = (trackId, e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    let frac = (e.clientX - rect.left) / rect.width; // 0..1 across the strip
+    frac = Math.max(0, Math.min(1, frac));
+
+    const tracksNow = tracksRef.current || [];
+    const track = tracksNow.find((t) => t.id === trackId);
+
+    if (track) {
+      const stripSeconds = getStripSeconds(track);
+      const clickTime = stripSeconds > 0 ? frac * stripSeconds : 0;
+      const clips = track.clips || [];
+
+      // Find the clip that contains this time
+      const clickedClip = clips.find((c) => {
+        const start = c.startTime;
+        const end = c.startTime + c.duration;
+        return clickTime >= start && clickTime <= end;
+      });
+
+      if (clickedClip) {
+        // Start dragging this clip; remember how far into the clip we clicked.
+        const offsetTime = clickTime - clickedClip.startTime;
+
+        draggingClipRef.current = {
+          trackId,
+          clipId: clickedClip.id,
+          offsetTime, // seconds into the clip where the mouse is
+        };
+
+        setSelectedTrackId(trackId);
+        return; // don't move the tape head in this case
+      }
+    }
+
+    // If we didn't click on a clip, fall back to dragging the tape head
     draggingHeadTrackIdRef.current = trackId;
     updateTrackTapeHeadFromEvent(trackId, e);
   };
 
-  const handleTrackStripMouseMove = (trackId, e) => {
-    if (draggingHeadTrackIdRef.current !== trackId) return;
-    updateTrackTapeHeadFromEvent(trackId, e);
+    const handleTrackStripMouseMove = (trackId, e) => {
+    // If a clip is being dragged, move that clip instead of the head
+    if (draggingClipRef.current) {
+      const { trackId: fromTrackId, clipId, offsetTime } =
+        draggingClipRef.current;
+
+      const rect = e.currentTarget.getBoundingClientRect();
+      let frac = (e.clientX - rect.left) / rect.width; // 0..1 across this strip
+      frac = Math.max(0, Math.min(1, frac));
+
+      const tracksNow = tracksRef.current || [];
+      const targetTrack = tracksNow.find((t) => t.id === trackId);
+      const fromTrack = tracksNow.find((t) => t.id === fromTrackId);
+      if (!targetTrack || !fromTrack) return;
+
+      const originalClip = (fromTrack.clips || []).find(
+        (c) => c.id === clipId
+      );
+      if (!originalClip) return;
+
+      const stripSeconds = getStripSeconds(targetTrack);
+      const hoverTime = stripSeconds > 0 ? frac * stripSeconds : 0;
+
+      const duration = originalClip.duration || 0;
+
+      // Where would the clip start so that the mouse stays at the same point inside it?
+      let newStartTime = hoverTime - (offsetTime || 0);
+      if (newStartTime < 0) newStartTime = 0;
+
+      // Don't let it run off the right edge
+      const maxStart =
+        stripSeconds > 0 ? Math.max(0, stripSeconds - duration) : 0;
+      if (newStartTime > maxStart) newStartTime = maxStart;
+
+      const candidateClip = {
+        ...originalClip,
+        startTime: newStartTime,
+        startFrac: stripSeconds > 0 ? newStartTime / stripSeconds : 0,
+      };
+
+      // Check overlap on the **target** track (excluding this same clip)
+      const otherTargetClips = (targetTrack.clips || []).filter(
+        (c) => c.id !== clipId
+      );
+      if (willOverlap(otherTargetClips, candidateClip)) {
+        // Just don't move into an overlapping spot
+        return;
+      }
+
+      // Commit the move into React state
+      setTracks((prev) =>
+        prev.map((t) => {
+          // Remove the clip from its previous track (if it's different)
+          if (t.id === fromTrackId && fromTrackId !== trackId) {
+            return {
+              ...t,
+              clips: (t.clips || []).filter((c) => c.id !== clipId),
+            };
+          }
+
+          // Insert / update it on the target track
+          if (t.id === trackId) {
+            const withoutThis = (t.clips || []).filter(
+              (c) => c.id !== clipId
+            );
+            return {
+              ...t,
+              clips: [...withoutThis, candidateClip],
+            };
+          }
+
+          return t;
+        })
+      );
+
+      // Update the ref so if we cross tracks, it now "belongs" to the new one
+      draggingClipRef.current = {
+        trackId,
+        clipId,
+        offsetTime,
+      };
+
+      return;
+    }
+
+    // No clip being dragged: fallback to moving the tape head
+    if (draggingHeadTrackIdRef.current === trackId) {
+      updateTrackTapeHeadFromEvent(trackId, e);
+    }
   };
+
   const playTrackFromHead = (track) => {
     if (!track || !track.recordingUrl) return;
 

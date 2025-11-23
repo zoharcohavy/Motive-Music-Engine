@@ -3,7 +3,6 @@ import SearchPage from "./pages/SearchPage";
 import JobDetailPage from "./pages/JobDetailPage";
 import ToneTestPage from "./pages/ToneTestPage";
 import HomePageUri from "./pages/HomePageUri";
-import AudioTapeApp from "./components/AudioTapeApp";
 
 export default function App() {
   return (
@@ -19,9 +18,6 @@ export default function App() {
 
         {/* Your piano page */}
         <Route path="/tone-test" element={<ToneTestPage />} />
-
-        {/* Your NEW audio tape page */}
-        <Route path="/tape" element={<AudioTapeApp />} />
 
       </Routes>
     </BrowserRouter>
