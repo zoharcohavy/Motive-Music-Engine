@@ -185,135 +185,26 @@ export default function TrackSection({
               </span>
             </div>
 
-            <div
+                       <div
               onMouseDown={(e) => {
-                if (mouseMode === "head") {
-                  handleTrackStripMouseDown(track.id, e);
-                }
+                handleTrackStripMouseDown(track.id, e);
               }}
               onMouseMove={(e) => {
-                if (mouseMode === "head") {
-                  handleTrackStripMouseMove(track.id, e);
-                }
-              }}
-              draggable={mouseMode === "clips" && track.hasRecording}
-onDragStart={(e) => {
-  if (mouseMode !== "clips" || !track.hasRecording) return;
-
-  e.dataTransfer.effectAllowed = "move";
-  e.dataTransfer.setData(
-    "application/json",
-    JSON.stringify({ fromTrackId: track.id })
-  );
-
-  // Custom drag preview: small ghost of the actual clip area
-  try {
-    const canvas = trackCanvasRefs.current[track.id];
-    if (!canvas) return;
-
-    const srcWidth = canvas.width;
-    const srcHeight = canvas.height;
-    if (!srcWidth || !srcHeight) return;
-
-    const baseDuration = 10; // must match draw loop
-    const zoom = track.zoom || 1;
-    const maxDuration = baseDuration / zoom;
-
-    const duration = track.recordingDuration || 0;
-    const fraction = Math.min(1, duration / maxDuration);
-
-    // For now, clips start at left edge (x=0)
-    const clipStartX = 0;
-    const clipWidthPxRaw = Math.max(4, fraction * srcWidth);
-
-    const maxSrcWidth = srcWidth - clipStartX;
-    if (maxSrcWidth <= 0) return;
-    const clipWidthPx = Math.min(clipWidthPxRaw, maxSrcWidth);
-
-    const maxPreviewWidth = 220;
-    const previewHeight = 40;
-    const scale = Math.min(1, maxPreviewWidth / clipWidthPx);
-    const previewWidth = Math.max(20, clipWidthPx * scale);
-
-    const previewCanvas = document.createElement("canvas");
-    previewCanvas.width = previewWidth;
-    previewCanvas.height = previewHeight;
-    const pctx = previewCanvas.getContext("2d");
-
-    // Dark background
-    pctx.fillStyle = "#111";
-    pctx.fillRect(0, 0, previewWidth, previewHeight);
-
-    // Draw the clip region from the real canvas, scaled down
-    pctx.drawImage(
-      canvas,
-      clipStartX,
-      0,
-      clipWidthPx,
-      srcHeight,
-      0,
-      0,
-      previewWidth,
-      previewHeight
-    );
-
-    // Semi-transparent overlay to give a "ghost" feel
-    pctx.fillStyle = "rgba(0, 0, 0, 0.25)";
-    pctx.fillRect(0, 0, previewWidth, previewHeight);
-
-    // Bright outline
-    pctx.strokeStyle = "rgba(255,255,255,0.8)";
-    pctx.lineWidth = 2;
-    pctx.strokeRect(1, 1, previewWidth - 2, previewHeight - 2);
-
-    e.dataTransfer.setDragImage(
-      previewCanvas,
-      previewWidth / 2,
-      previewHeight / 2
-    );
-  } catch (err) {
-    console.warn("Drag ghost error:", err);
-    // If anything blows up, browser falls back to default ghost
-  }
-}}
-
-              onDragOver={(e) => {
-                if (mouseMode !== "clips") return;
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
-              }}
-              onDrop={(e) => {
-                if (mouseMode !== "clips") return;
-                e.preventDefault();
-                try {
-                  const data = JSON.parse(
-                    e.dataTransfer.getData("application/json")
-                  );
-                  if (
-                    data &&
-                    typeof data.fromTrackId === "number" &&
-                    data.fromTrackId !== track.id
-                  ) {
-                    moveTrackRecording(data.fromTrackId, track.id);
-                  }
-                } catch {
-                  // ignore invalid drops
-                }
+                handleTrackStripMouseMove(track.id, e);
               }}
               style={{
-                flexGrow: 1,
-                height: "56px",
-                borderRadius: "4px",
-                border: "1px solid #555",
-                backgroundColor: "#111",
                 position: "relative",
+                flex: 1,
+                borderRadius: "4px",
+                background:
+                  selectedTrackId === track.id ? "#20252f" : "#121212",
+                border:
+                  selectedTrackId === track.id
+                    ? "1px solid #4a90e2"
+                    : "1px solid #333",
                 overflow: "hidden",
-                cursor:
-                  mouseMode === "clips" && track.hasRecording
-                    ? "grab"
-                    : track.hasRecording
-                    ? "pointer"
-                    : "default",
+                height: "56px",
+                cursor: "pointer",
               }}
             >
               <canvas
@@ -324,10 +215,10 @@ onDragStart={(e) => {
                   width: "100%",
                   height: "100%",
                   display: "block",
-                  pointerEvents: "none",
                 }}
               />
             </div>
+
 
             <span
               style={{
