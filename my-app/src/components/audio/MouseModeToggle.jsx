@@ -1,0 +1,37 @@
+import React from "react";
+
+export default function MouseModeToggle({ mouseMode, setMouseMode }) {
+  return (
+    <div
+      style={{
+        marginTop: "0.5rem",
+        marginBottom: "0.25rem",
+        fontSize: "0.8rem",
+        color: "#ccc",
+        display: "flex",
+        alignItems: "center",
+        gap: "0.75rem",
+      }}
+    >
+      <span style={{ fontWeight: 500 }}>Mouse mode:</span>
+      <label>
+        <input
+          type="radio"
+          checked={mouseMode === "head"}
+          onChange={() => setMouseMode("head")}
+          style={{ marginRight: "0.25rem" }}
+        />
+        Move tape head
+      </label>
+      <label>
+        <input
+          type="radio"
+          checked={mouseMode === "clips"}
+          onChange={() => setMouseMode("clips")}
+          style={{ marginRight: "0.25rem" }}
+        />
+        Move recordings between tracks
+      </label>
+    </div>
+  );
+}
