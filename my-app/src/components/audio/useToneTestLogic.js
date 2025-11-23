@@ -103,22 +103,103 @@ const willOverlap = (clips, candidate, ignoreId = null) => {
 
     // ---------- TRACK DRAWING ----------
   // Draw tracks (clips and tape heads) into canvases whenever tracks or zoom change
+  // ---------- TAPE-HEAD ANIMATION (RECORDING) ----------
   useEffect(() => {
-    if (!trackCanvasRefs.current) return;
+    let frameId = null;
+
+    const step = () => {
+      const recorder = mediaRecorderRef.current;
+      const isRecording = recorder && recorder.state === "recording";
+      const targetTrackId = recordingTargetTrackIdRef.current;
+
+      if (
+        isRecording &&
+        targetTrackId != null &&
+        recordStartTimeRef.current != null
+      ) {
+        // How long we've been recording
+        const now = performance.now();
+        const elapsedSec =
+          (now - recordStartTimeRef.current) / 1000;
+
+        // Keep this in sync with what onstop uses
+        recordDurationRef.current = elapsedSec;
+
+        const tracksNow = tracksRef.current || [];
+        const track = tracksNow.find((t) => t.id === targetTrackId);
+
+        if (track) {
+          const stripSeconds = getStripSeconds(track);
+          const startFrac = recordInitialHeadPosRef.current || 0;
+
+          // Move the head to the right at real-time speed
+          let headPos = startFrac;
+          if (stripSeconds > 0) {
+            headPos = startFrac + elapsedSec / stripSeconds;
+          }
+
+          // Clamp to the right edge
+          if (headPos >= 1) {
+            headPos = 1;
+            // Stop recording if we hit the end of the strip
+            if (recorder.state === "recording") {
+              recorder.stop();
+            }
+          }
+
+          // Check if we've run into an existing clip on this track
+          const stripTime = headPos * stripSeconds;
+          const existingClips = track.clips || [];
+          const collided = existingClips.find((c) => {
+            const start = c.startTime;
+            const end = c.startTime + c.duration;
+            return stripTime >= start && stripTime <= end;
+          });
+
+          if (collided && recorder.state === "recording") {
+            // Stop immediately when we reach a different clip
+            recorder.stop();
+          }
+
+          // Apply the new head position to React state
+          setTracks((prev) =>
+            prev.map((t) =>
+              t.id === targetTrackId ? { ...t, headPos } : t
+            )
+          );
+        }
+      }
+
+      frameId = window.requestAnimationFrame(step);
+      animationFrameRef.current = frameId;
+    };
+
+    frameId = window.requestAnimationFrame(step);
+    animationFrameRef.current = frameId;
+
+    return () => {
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [setTracks]);
+  // ---------- TRACK DRAWING ----------
+  useEffect(() => {
+    const refs = trackCanvasRefs.current;
+    if (!refs) return;
 
     tracks.forEach((track) => {
-      const canvas = trackCanvasRefs.current[track.id];
+      const canvas = refs[track.id];
       if (!canvas) return;
 
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
 
-      const width = rect.width || canvas.width;
+      const width = rect.width || canvas.width || 0;
       const height = rect.height || canvas.height || 56;
-
       if (width <= 0 || height <= 0) return;
 
-      // Resize canvas to match CSS size * devicePixelRatio
+      // Resize backing store to match CSS size * devicePixelRatio
       if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
         canvas.width = width * dpr;
         canvas.height = height * dpr;
@@ -127,19 +208,17 @@ const willOverlap = (clips, candidate, ignoreId = null) => {
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
 
-      // Reset transform so we can draw in CSS pixels
+      // draw in CSS pixels
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      // Clear
+      // Clear & background
       ctx.clearRect(0, 0, width, height);
-
-      // Background
       ctx.fillStyle = "#111";
       ctx.fillRect(0, 0, width, height);
 
       const stripSeconds = getStripSeconds(track);
 
-      // ---- Draw clips if we have them ----
+      // ---- Draw clips if present ----
       if (track.clips && track.clips.length > 0) {
         track.clips.forEach((clip) => {
           const startFrac =
@@ -153,10 +232,8 @@ const willOverlap = (clips, candidate, ignoreId = null) => {
           if (clip.image) {
             const img = new Image();
             img.src = clip.image;
-
             try {
               const srcWidth = img.width || clipWidth;
-
               ctx.save();
               ctx.beginPath();
               ctx.rect(startX, 0, clipWidth, height);
@@ -174,7 +251,6 @@ const willOverlap = (clips, candidate, ignoreId = null) => {
               );
               ctx.restore();
             } catch (e) {
-              // fallback generic waveform
               ctx.save();
               ctx.translate(startX, 0);
               drawGenericWave(ctx, clipWidth, height, 0.9);
@@ -187,24 +263,23 @@ const willOverlap = (clips, candidate, ignoreId = null) => {
             ctx.restore();
           }
 
-          // Clip outline
+          // outline
           ctx.strokeStyle = "rgba(255,255,255,0.7)";
           ctx.lineWidth = 2;
           ctx.strokeRect(startX + 1, 1, clipWidth - 2, height - 2);
         });
       } else if (track.hasRecording && track.recordingDuration) {
-        // ---- Legacy single-recording drawing (for older tracks) ----
+        // ---- Legacy: single recording block ----
         const clipStartFrac = track.clipStartPos || 0;
         const clipDuration = track.recordingDuration;
-        const baseDuration = stripSeconds || 10;
-        const durFrac = baseDuration > 0 ? clipDuration / baseDuration : 1;
+        const durFrac =
+          stripSeconds > 0 ? clipDuration / stripSeconds : 1;
         const startX = clipStartFrac * width;
         const clipWidth = Math.min(1, durFrac) * width;
 
         if (track.recordingImage) {
           const img = new Image();
           img.src = track.recordingImage;
-
           try {
             const srcWidth = img.width || clipWidth;
             ctx.save();
@@ -246,11 +321,11 @@ const willOverlap = (clips, candidate, ignoreId = null) => {
         track.headPos != null ? track.headPos : track.tapeHeadPos || 0;
       const headX = headPos * width;
 
-      // Slightly tinted area before the head
+      // subtle fill before the head
       ctx.fillStyle = "rgba(255,255,255,0.04)";
       ctx.fillRect(0, 0, headX, height);
 
-      // Yellow head line
+      // yellow head line
       ctx.strokeStyle = "#ffff00";
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -258,8 +333,7 @@ const willOverlap = (clips, candidate, ignoreId = null) => {
       ctx.lineTo(headX, height);
       ctx.stroke();
     });
-  }, [tracks, globalZoom, trackCanvasRefs]);
-
+  }, [tracks]);
 
   // ---------- AUDIO SETUP ----------
   const setupAudioContext = () => {
@@ -539,97 +613,145 @@ const updateTrackTapeHeadFromEvent = (trackId, evt) => {
 
     const audio = new Audio(track.recordingUrl);
     currentAudioRef.current = audio;
+
+    const trackId = track.id;
     const startFrac = track.tapeHeadPos || 0;
+
+    const attachTimeUpdate = () => {
+      const duration =
+        track.recordingDuration && track.recordingDuration > 0
+          ? track.recordingDuration
+          : audio.duration || 0;
+      if (!duration) return;
+
+      audio.addEventListener("timeupdate", () => {
+        const frac = audio.currentTime / duration;
+
+        setTracks((prev) =>
+          prev.map((t) =>
+            t.id === trackId
+              ? {
+                  ...t,
+                  tapeHeadPos: Math.min(1, Math.max(0, frac)),
+                }
+              : t
+          )
+        );
+      });
+
+      audio.addEventListener("ended", () => {
+        if (currentAudioRef.current === audio) {
+          currentAudioRef.current = null;
+        }
+      });
+    };
 
     audio.addEventListener("loadedmetadata", () => {
       try {
         audio.currentTime = startFrac * audio.duration;
       } catch (e) {}
+      attachTimeUpdate();
       audio.play().catch(() => {});
     });
 
+    // In case metadata is already loaded
+    attachTimeUpdate();
     audio.play().catch(() => {});
   };
+
 
   // Helper: play a specific clip from the current tape-head position on the strip
   const playClipFromHead = (track, clip) => {
-    if (!clip || !clip.url) return;
+  if (!clip || !clip.url) return;
 
-    const audio = new Audio(clip.url);
-    currentAudioRef.current = audio;
+  const audio = new Audio(clip.url);
+  currentAudioRef.current = audio;
 
-    const stripSeconds = getStripSeconds(track);
-    const headPos =
-      track.headPos != null ? track.headPos : track.tapeHeadPos || 0;
-    const headTime = headPos * stripSeconds;
+  const trackId = track.id;
 
-    const offsetInClip = Math.max(0, headTime - clip.startTime);
-    const offsetFrac =
-      clip.duration > 0 ? offsetInClip / clip.duration : 0;
+  // Where is the head right now (0..1), and what's that in seconds?
+  const stripSecondsInitial = getStripSeconds(track);
+  const headPosInitial =
+    track.headPos != null ? track.headPos : track.tapeHeadPos || 0;
+  const headTimeInitial = headPosInitial * stripSecondsInitial;
 
-    audio.addEventListener("loadedmetadata", () => {
-      try {
-        audio.currentTime = offsetFrac * audio.duration;
-      } catch (e) {}
-      audio.play().catch(() => {});
+  // How far into the clip should we start, based on the head position?
+  const offsetInClip = Math.max(0, headTimeInitial - clip.startTime);
+  const offsetFrac =
+    clip.duration > 0 ? offsetInClip / clip.duration : 0;
+
+  // Keep the tape head in sync with audio time
+  const attachTimeUpdate = () => {
+    audio.addEventListener("timeupdate", () => {
+      const tracksNow = tracksRef.current || [];
+      const t = tracksNow.find((tr) => tr.id === trackId);
+      if (!t) return;
+
+      const stripSeconds = getStripSeconds(t);
+
+      // audio.currentTime is time inside the clip
+      const clipTime = audio.currentTime;
+      const headTime = clip.startTime + clipTime;
+      const headPos =
+        stripSeconds > 0
+          ? Math.min(1, headTime / stripSeconds)
+          : 0;
+
+      setTracks((prev) =>
+        prev.map((tr) =>
+          tr.id === trackId ? { ...tr, headPos } : tr
+        )
+      );
     });
 
-    audio.play().catch(() => {});
+    audio.addEventListener("ended", () => {
+      // Clear the current audio reference when done
+      if (currentAudioRef.current === audio) {
+        currentAudioRef.current = null;
+      }
+    });
   };
 
-  // Play button in the UI: play from the head on the selected track
-  const handleGlobalPlay = () => {
+  audio.addEventListener("loadedmetadata", () => {
+    try {
+      audio.currentTime = offsetFrac * audio.duration;
+    } catch (e) {}
+    attachTimeUpdate();
+    audio.play().catch(() => {});
+  });
+
+  // In case metadata is already loaded
+  attachTimeUpdate();
+  audio.play().catch(() => {});
+};
+
+  const togglePlayFromHead = () => {
+    const current = currentAudioRef.current;
+
+    // If something is already playing, pause it
+    if (current && !current.paused && !current.ended) {
+      current.pause();
+      return;
+    }
+
+    // Otherwise start playback from the head on the selected track
     const t = tracksRef.current.find(
       (tr) => tr.id === selectedTrackId && tr.hasRecording && tr.recordingUrl
     );
     if (!t) return;
 
-    // If you want this button to act exactly like the spacebar,
-    // you could call togglePlayFromHead() here instead.
     playTrackFromHead(t);
   };
 
+  // Play button in the UI: play from the head on the selected track
+ // Play button in the UI: same behavior as the Space bar
+const handleGlobalPlay = () => {
+  togglePlayFromHead();
+};
+
+
   // --- PLAY / PAUSE FROM CURRENT HEAD POSITION (Space bar) ---
-  const togglePlayFromHead = () => {
-    const current = currentAudioRef.current;
 
-    // If audio is currently playing → pause it
-    if (current && !current.paused && !current.ended) {
-      current.pause();
-      currentAudioRef.current = null;
-      return;
-    }
-
-    const t = tracksRef.current.find((track) => track.id === selectedTrackId);
-    if (!t) return;
-
-    // If we have clips on this track, find the clip under the head and play just that
-    if (t.clips && t.clips.length > 0) {
-      const stripSeconds = getStripSeconds(t);
-      const headPos =
-        t.headPos != null ? t.headPos : t.tapeHeadPos || 0;
-      const headTime = headPos * stripSeconds;
-
-      const clip = t.clips.find((c) => {
-        const start = c.startTime;
-        const end = c.startTime + c.duration;
-        return headTime >= start && headTime <= end;
-      });
-
-      if (!clip) {
-        // Head is in empty space: nothing to play
-        return;
-      }
-
-      playClipFromHead(t, clip);
-      return;
-    }
-
-    // Fallback: legacy single-recording behavior
-    if (t.hasRecording && t.recordingUrl) {
-      playTrackFromHead(t);
-    }
-  };
 
   // ---------- SERVER RECORDINGS ----------
   const fetchRecordings = async () => {
@@ -750,26 +872,25 @@ const updateTrackTapeHeadFromEvent = (trackId, evt) => {
 
   // ---------- KEYBOARD SHORTCUTS ----------
   useEffect(() => {
-const handleKeyDown = (e) => {
-  const tag = e.target.tagName.toLowerCase();
-  if (tag === "input" || tag === "textarea") return;
+    const handleKeyDown = (e) => {
+      const targetTag = e.target.tagName.toLowerCase();
+      if (targetTag === "input" || targetTag === "textarea") return;
 
-  // SPACE = play / pause from tape head
-  if (e.code === "Space" || e.key === " ") {
-    e.preventDefault();
-    togglePlayFromHead();
-    return;
-  }
+      // Space = play / pause from tape head
+      if (e.code === "Space" || e.key === " ") {
+        e.preventDefault();
+        togglePlayFromHead();
+        return;
+      }
 
-  // ENTER = start/stop recording
-  if (e.key === "Enter") {
-    e.preventDefault();
-    if (selectedTrackId != null) {
-      handleTrackRecordToggle(selectedTrackId);
-    }
-    return;
-  }
-
+      // Enter = start/stop recording on selected track
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (selectedTrackId != null) {
+          handleTrackRecordToggle(selectedTrackId);
+        }
+        return;
+      }
 
       const keyIndex = getKeyIndexForKeyboardChar(e.key);
       if (keyIndex !== -1 && keyIndex >= 0 && keyIndex < KEYS.length) {
@@ -793,7 +914,7 @@ const handleKeyDown = (e) => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [selectedTrackId, waveform, effect]);
+  }, [selectedTrackId, playNote, togglePlayFromHead, handleTrackRecordToggle]);
 
   // ---------- RETURN API ----------
   return {
