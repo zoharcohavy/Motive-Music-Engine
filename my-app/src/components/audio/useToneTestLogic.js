@@ -86,6 +86,91 @@ const willOverlap = (clips, candidate, ignoreId = null) => {
   const [activeKeyIds, setActiveKeyIds] = useState([]);
 
   // keep refs synced
+    // ---------- LIVE WAVEFORM DRAWING ----------
+  useEffect(() => {
+    const canvas = waveCanvasRef.current;
+    if (!canvas) return;
+
+    const ctx2d = canvas.getContext("2d");
+    if (!ctx2d) return;
+
+    // Make sure AudioContext and Analyser exist
+    const audioCtx = getAudioContext();
+    if (!audioCtx) return;
+    const analyser = analyserRef.current;
+    if (!analyser) return;
+
+    // Prepare buffer to read time-domain data
+    const bufferLength = analyser.fftSize;
+    const dataArray = new Uint8Array(bufferLength);
+
+    let frameId;
+
+    const draw = () => {
+      if (!waveCanvasRef.current) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+
+      const width = rect.width || canvas.width || 0;
+      const height = rect.height || canvas.height || 0;
+      if (width <= 0 || height <= 0) {
+        frameId = requestAnimationFrame(draw);
+        return;
+      }
+
+      // Resize backing store if needed
+      if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+      }
+
+      ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      // Get the current waveform
+      analyser.getByteTimeDomainData(dataArray);
+
+      // Clear background
+      ctx2d.clearRect(0, 0, width, height);
+      ctx2d.fillStyle = "#111";
+      ctx2d.fillRect(0, 0, width, height);
+
+      // Draw the waveform
+      ctx2d.lineWidth = 2;
+      ctx2d.strokeStyle = "#4af"; // cyan-ish line
+      ctx2d.beginPath();
+
+      const sliceWidth = width / bufferLength;
+      let x = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0;   // 0..2
+        const y = (v * 0.5) * height;     // center around middle-ish
+
+        if (i === 0) {
+          ctx2d.moveTo(x, y);
+        } else {
+          ctx2d.lineTo(x, y);
+        }
+
+        x += sliceWidth;
+      }
+
+      ctx2d.stroke();
+
+      frameId = requestAnimationFrame(draw);
+      animationFrameRef.current = frameId;
+    };
+
+    draw();
+
+    return () => {
+      if (frameId) {
+        cancelAnimationFrame(frameId);
+      }
+    };
+  }, [waveform, effect]);
+
   useEffect(() => {
     tracksRef.current = tracks;
   }, [tracks]);
@@ -695,30 +780,45 @@ const updateTrackTapeHeadFromEvent = (trackId, evt) => {
       }
 
       // Commit the move into React state
-      setTracks((prev) =>
-        prev.map((t) => {
-          // Remove the clip from its previous track (if it's different)
-          if (t.id === fromTrackId && fromTrackId !== trackId) {
-            return {
-              ...t,
-              clips: (t.clips || []).filter((c) => c.id !== clipId),
-            };
-          }
+          setTracks((prev) =>
+      prev.map((t) => {
+        // Always remove this clip from the track we're dragging FROM
+        if (t.id === fromTrackId) {
+          const withoutThis = (t.clips || []).filter(
+            (c) => c.id !== clipId
+          );
 
-          // Insert / update it on the target track
+          // If we're dragging within the same track, put it back at the new position
           if (t.id === trackId) {
-            const withoutThis = (t.clips || []).filter(
-              (c) => c.id !== clipId
-            );
             return {
               ...t,
               clips: [...withoutThis, candidateClip],
             };
           }
 
-          return t;
-        })
-      );
+          // If we've left this track, it no longer has the clip
+          return {
+            ...t,
+            clips: withoutThis,
+          };
+        }
+
+        // If this is the track we're currently over (and it's not the fromTrack)
+        if (t.id === trackId) {
+          const withoutThis = (t.clips || []).filter(
+            (c) => c.id !== clipId
+          );
+          return {
+            ...t,
+            clips: [...withoutThis, candidateClip],
+          };
+        }
+
+        // All other tracks are untouched
+        return t;
+      })
+    );
+
 
       // Update the ref so if we cross tracks, it now "belongs" to the new one
       draggingClipRef.current = {
