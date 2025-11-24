@@ -1,5 +1,19 @@
 import React from "react";
 
+const BASE_STRIP_SECONDS = 10;
+
+const getStripSecondsForTrack = (track) => {
+  const zoom = track.zoom || 1;
+  return BASE_STRIP_SECONDS / zoom;
+};
+
+const getHeadSecondsForTrack = (track) => {
+  const stripSeconds = getStripSecondsForTrack(track);
+  const headPos =
+    track.headPos != null ? track.headPos : track.tapeHeadPos || 0;
+  return stripSeconds * headPos;
+};
+
 export default function TrackSection({
   tracks,
   selectedTrackId,
@@ -171,18 +185,15 @@ export default function TrackSection({
 
               <span
                 style={{
-                  fontSize: "0.7rem",
-                  color: "#ccc",
-                  minWidth: "60px",
-                  textAlign: "center",
+                fontSize: "0.7rem",
+                color: "#ccc",
+                minWidth: "60px",
+                textAlign: "center",
                 }}
               >
-                {track.recordingDuration
-                  ? `${((track.tapeHeadPos || 0) * track.recordingDuration).toFixed(
-                      2
-                    )}s`
-                  : "0.00s"}
+               {`${getHeadSecondsForTrack(track).toFixed(2)}s`}
               </span>
+
             </div>
 
                        <div
