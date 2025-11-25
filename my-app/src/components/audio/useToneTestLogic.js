@@ -35,6 +35,10 @@ export function useToneTestLogic() {
   const transportStartWallTimeRef = useRef(null);
   const transportStartHeadTimeRef = useRef(0);
   const currentClipIdRef = useRef(null);
+  const transportActiveClipsRef = useRef(new Map()); 
+  // key: `${trackId}:${clipId}` -> HTMLAudioElement
+
+
 
 
 
@@ -655,7 +659,8 @@ if (targetTrackId != null) {
     };
   }, []);
 
-  // ---------- TAPE-HEAD / SCRUB ----------
+// ---------- TAPE-HEAD / SCRUB ----------
+// Global tape head: clicking/dragging on any track moves ONE shared head
 const updateTrackTapeHeadFromEvent = (trackId, evt) => {
   const rect = evt.currentTarget.getBoundingClientRect();
   let pos = (evt.clientX - rect.left) / rect.width; // 0..1 across full strip
@@ -663,15 +668,13 @@ const updateTrackTapeHeadFromEvent = (trackId, evt) => {
 
   setTracks((prev) =>
     prev.map((track) => {
-      if (track.id !== trackId) return track;
-
-      // If there's a recording, convert strip position → fraction of recording
+      // If there's a recording on this track, convert strip position → fraction of that recording
       if (track.hasRecording && track.recordingDuration) {
         const zoom = track.zoom || 1;
-        const baseDuration = 10; // must match draw loop
+        const baseDuration = BASE_STRIP_SECONDS; // must match draw loop and TrackSection
         const maxDuration = baseDuration / zoom;
 
-        // pos is 0..1 across maxDuration seconds
+        // pos is 0..1 across maxDuration seconds on strip
         // tapeHeadPos should be 0..1 across track.recordingDuration seconds
         const tapeFrac = Math.min(
           1,
@@ -681,19 +684,20 @@ const updateTrackTapeHeadFromEvent = (trackId, evt) => {
         return {
           ...track,
           tapeHeadPos: tapeFrac,
-          headPos: pos, // strip-relative head position (0..1)
+          headPos: pos, // strip-relative 0..1, shared by ALL tracks logically
         };
       }
 
-      // No recording yet: plain 0..1 across strip
+      // No recording on this track: just store raw strip fraction
       return {
         ...track,
         tapeHeadPos: pos,
-        headPos: pos, // keep headPos in sync even without a recording
+        headPos: pos,
       };
     })
   );
 };
+
 
 
 
@@ -1006,6 +1010,17 @@ const startClipAudioAtHeadTime = (clip, headTime) => {
     });
   }
 };
+const stopAllTransportAudio = () => {
+  const map = transportActiveClipsRef.current;
+  if (!map) return;
+  for (const audio of map.values()) {
+    try {
+      audio.pause();
+    } catch (e) {}
+  }
+  transportActiveClipsRef.current = new Map();
+};
+  
 const toggleTransportPlay = () => {
   // If already playing, stop transport + audio
   if (isTransportPlayingRef.current) {
@@ -1014,54 +1029,54 @@ const toggleTransportPlay = () => {
       cancelAnimationFrame(transportAnimationFrameRef.current);
       transportAnimationFrameRef.current = null;
     }
-    if (currentAudioRef.current) {
-      try {
-        currentAudioRef.current.pause();
-      } catch (e) {}
-      currentAudioRef.current = null;
-    }
-    currentClipIdRef.current = null;
+    stopAllTransportAudio();
+    currentClipIdRef.current = null; // no longer used for multi-clip, but safe to reset
     return;
   }
 
-  // Don't start transport while recording
-  const recorder = mediaRecorderRef.current;
-  if (recorder && recorder.state === "recording") {
-    return;
-  }
+  const tracksNow = tracksRef.current || [];
+  if (!tracksNow.length) return;
 
-  // Start new transport from current head on selected track
-  const track = tracksRef.current.find(
-    (t) => t.id === selectedTrackId
+  // Use a single "global strip length" based on zoom
+  const zoom = (tracksNow[0] && tracksNow[0].zoom) || 1;
+  const stripSeconds = BASE_STRIP_SECONDS / zoom;
+
+  // Use headPos from any track (since we now keep them in sync)
+  let headPos = 0;
+  const trackWithHead = tracksNow.find(
+    (t) => t.headPos != null || t.tapeHeadPos != null
   );
-  if (!track) return;
-
-  const stripSeconds = getStripSeconds(track);
-  const headPos =
-    track.headPos != null ? track.headPos : track.tapeHeadPos || 0;
+  if (trackWithHead) {
+    headPos =
+      trackWithHead.headPos != null
+        ? trackWithHead.headPos
+        : trackWithHead.tapeHeadPos || 0;
+  }
   const headTime = stripSeconds > 0 ? headPos * stripSeconds : 0;
 
   isTransportPlayingRef.current = true;
-  transportTrackIdRef.current = track.id;
   transportStartWallTimeRef.current = performance.now();
   transportStartHeadTimeRef.current = headTime;
   currentClipIdRef.current = null;
+  stopAllTransportAudio(); // clear any leftovers
 
   const step = () => {
     if (!isTransportPlayingRef.current) return;
 
-    const trackId = transportTrackIdRef.current;
-    const tracksNow = tracksRef.current || [];
-    const t = tracksNow.find((tr) => tr.id === trackId);
-    if (!t) {
-      // Track got deleted? stop
+    const tracksNowInner = tracksRef.current || [];
+    if (!tracksNowInner.length) {
       isTransportPlayingRef.current = false;
+      stopAllTransportAudio();
       return;
     }
 
-    const stripSecondsNow = getStripSeconds(t);
+    const zoomNow =
+      (tracksNowInner[0] && tracksNowInner[0].zoom) || 1;
+    const stripSecondsNow = BASE_STRIP_SECONDS / zoomNow;
+
     const now = performance.now();
-    const elapsed = (now - transportStartWallTimeRef.current) / 1000;
+    const elapsed =
+      (now - transportStartWallTimeRef.current) / 1000;
     const startTime = transportStartHeadTimeRef.current;
 
     let newTime = startTime + elapsed;
@@ -1075,61 +1090,89 @@ const toggleTransportPlay = () => {
     const newHeadPos =
       stripSecondsNow > 0 ? newTime / stripSecondsNow : 0;
 
-    // Move the tape head on this track
+    // Move the tape head on *all* tracks so UI stays in sync
     setTracks((prev) =>
-      prev.map((tr) =>
-        tr.id === trackId
-          ? {
-              ...tr,
-              headPos: newHeadPos,
-              tapeHeadPos: newHeadPos,
-            }
-          : tr
-      )
+      prev.map((tr) => ({
+        ...tr,
+        headPos: newHeadPos,
+        tapeHeadPos: newHeadPos,
+      }))
     );
 
-    // Now decide what to play at this time
-    const updatedTracks = tracksRef.current || [];
-    const tNow = updatedTracks.find((tr) => tr.id === trackId);
-    const clips = (tNow && tNow.clips) || [];
+    // Decide what should be playing at this time
+    const activeMap =
+      transportActiveClipsRef.current || new Map();
+    const shouldBeActive = new Set();
 
-    const clipUnderHead = clips.find((c) => {
-      const start = c.startTime;
-      const end = c.startTime + c.duration;
-      return newTime >= start && newTime < end;
+    tracksNowInner.forEach((tr) => {
+      const clips = tr.clips || [];
+      clips.forEach((clip) => {
+        if (!clip || !clip.url) return;
+
+        const start = clip.startTime;
+        const end = clip.startTime + clip.duration;
+        if (newTime >= start && newTime < end) {
+          const key = `${tr.id}:${clip.id}`;
+          shouldBeActive.add(key);
+
+          // If this clip is not already playing, start it
+          if (!activeMap.has(key)) {
+            const audio = new Audio(clip.url);
+
+            const offsetInClip = Math.max(
+              0,
+              newTime - clip.startTime
+            );
+            const offsetFrac =
+              clip.duration > 0
+                ? offsetInClip / clip.duration
+                : 0;
+
+            const startAudioAtOffset = () => {
+              try {
+                audio.currentTime =
+                  offsetFrac * audio.duration;
+              } catch (e) {}
+              audio.play().catch(() => {});
+            };
+
+            if (audio.readyState >= 1) {
+              // metadata loaded
+              startAudioAtOffset();
+            } else {
+              audio.addEventListener(
+                "loadedmetadata",
+                startAudioAtOffset
+              );
+            }
+
+            activeMap.set(key, audio);
+          }
+        }
+      });
     });
 
-    const currentClipId = currentClipIdRef.current;
-
-    if (!clipUnderHead && currentClipId != null) {
-      // We left the current clip -> go silent
-      if (currentAudioRef.current) {
+    // Stop any clips that should no longer be active
+    for (const [key, audio] of activeMap.entries()) {
+      if (!shouldBeActive.has(key)) {
         try {
-          currentAudioRef.current.pause();
+          audio.pause();
         } catch (e) {}
-        currentAudioRef.current = null;
+        activeMap.delete(key);
       }
-      currentClipIdRef.current = null;
-    } else if (
-      clipUnderHead &&
-      clipUnderHead.id !== currentClipId
-    ) {
-      // We entered a new clip
-      currentClipIdRef.current = clipUnderHead.id;
-      startClipAudioAtHeadTime(clipUnderHead, newTime);
     }
 
+    transportActiveClipsRef.current = activeMap;
+
     if (reachedEnd) {
-      // Stop at end of strip
       isTransportPlayingRef.current = false;
-      if (currentAudioRef.current) {
-        try {
-          currentAudioRef.current.pause();
-        } catch (e) {}
-        currentAudioRef.current = null;
+      if (transportAnimationFrameRef.current) {
+        cancelAnimationFrame(
+          transportAnimationFrameRef.current
+        );
+        transportAnimationFrameRef.current = null;
       }
-      currentClipIdRef.current = null;
-      transportAnimationFrameRef.current = null;
+      stopAllTransportAudio();
       return;
     }
 
@@ -1140,6 +1183,7 @@ const toggleTransportPlay = () => {
   transportAnimationFrameRef.current =
     requestAnimationFrame(step);
 };
+
 
   const togglePlayFromHead = () => {
     const current = currentAudioRef.current;
@@ -1159,16 +1203,10 @@ const toggleTransportPlay = () => {
     playTrackFromHead(t);
   };
 
-  // Play button in the UI: play from the head on the selected track
  // Play button in the UI: same behavior as the Space bar
 const handleGlobalPlay = () => {
   toggleTransportPlay();
 };
-
-
-
-  // --- PLAY / PAUSE FROM CURRENT HEAD POSITION (Space bar) ---
-
 
   // ---------- SERVER RECORDINGS ----------
   const fetchRecordings = async () => {
