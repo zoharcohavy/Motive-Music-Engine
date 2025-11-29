@@ -5,6 +5,8 @@ import TopControls from "../components/audio/TopControls";
 import MouseModeToggle from "../components/audio/MouseModeToggle";
 import TrackSection from "../components/audio/TrackSection";
 import PianoKeyboard from "../components/audio/PianoKeyboard";
+import RoomModal from "../components/audio/RoomModal";
+
 
 export default function ToneTestPage() {
   const {
@@ -32,28 +34,85 @@ export default function ToneTestPage() {
     trackCanvasRefs,
     activeKeyIds,
     handleKeyMouseDown,
-    handleKeyMouseEnter,
+    handleKeyMouseEnter,roomId,
+    roomStatus,
+    isRoomModalOpen,
+    openRoomModal,
+    closeRoomModal,
+    connectToRoom,
+    disconnectRoom,
+    handleRoomRecordToggle,
+    isRoomRecording,
   } = useToneTestLogic();
 
-  return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        flexDirection: "column",
-        boxSizing: "border-box",
-        padding: "1rem 1.5rem",
-        paddingBottom: "140px",
-        fontFamily: "sans-serif",
-        overflowX: "hidden",
-        position: "relative",
-      }}
-    >
+    return (
+    <div className="tone-test-page" style={{ padding: "1rem" }}>
+      
       {/* Recordings list in upper-right */}
       <RecordingsPanel
         recordings={recordings}
         recordingsError={recordingsError}
       />
+
+      {/* Room controls under recordings */}
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "0.5rem",
+          marginBottom: "0.5rem",
+          fontSize: "0.8rem",
+        }}
+      >
+        {/* Left: room label */}
+        <div style={{ opacity: 0.8 }}>
+          {roomStatus === "connected" && roomId ? (
+            <>
+              Room: <strong>{roomId}</strong>
+            </>
+          ) : (
+            <>Not in a room</>
+          )}
+        </div>
+
+        {/* Right: buttons */}
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={openRoomModal}
+            style={{
+              padding: "0.2rem 0.6rem",
+              borderRadius: "4px",
+              border: "1px solid #444",
+              background:
+                roomStatus === "connected" ? "#133" : "#222",
+              color: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            {roomStatus === "connected" ? "Change Room" : "Connect to Room"}
+          </button>
+
+          {roomStatus === "connected" && (
+            <button
+              type="button"
+              onClick={handleRoomRecordToggle}
+              style={{
+                padding: "0.2rem 0.6rem",
+                borderRadius: "4px",
+                border: "1px solid #644",
+                background: isRoomRecording ? "#b22" : "#331111",
+                color: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              {isRoomRecording ? "⏹ Stop Room Record" : "⏺ Record Room"}
+            </button>
+          )}
+        </div>
+      </div>
+
 
       {/* Top controls (waveform + effect) */}
       <TopControls
@@ -62,6 +121,7 @@ export default function ToneTestPage() {
         effect={effect}
         setEffect={setEffect}
       />
+
 
       {/* Spacer */}
       <div style={{ flexGrow: 1 }} />
@@ -110,6 +170,15 @@ export default function ToneTestPage() {
         onMouseDownKey={handleKeyMouseDown}
         onMouseEnterKey={handleKeyMouseEnter}
       />
+      <RoomModal
+  isOpen={isRoomModalOpen}
+  onClose={closeRoomModal}
+  roomStatus={roomStatus}
+  roomId={roomId}
+  connectToRoom={connectToRoom}
+  disconnectRoom={disconnectRoom}
+/>
+
     </div>
   );
 }

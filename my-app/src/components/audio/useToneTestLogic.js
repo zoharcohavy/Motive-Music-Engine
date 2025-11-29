@@ -6,6 +6,8 @@ import {
 } from "./constants";
 import { drawGenericWave } from "./drawUtils";
 
+
+
 export function useToneTestLogic() {
   // ---------- REFS ----------
   const audioCtxRef = useRef(null);
@@ -48,8 +50,130 @@ export function useToneTestLogic() {
   const [effect, setEffect] = useState("none");
   const [recordings, setRecordings] = useState([]);
   const [recordingsError, setRecordingsError] = useState(null);
+  const [isRoomRecording, setIsRoomRecording] = useState(false);
+
 
   const BASE_STRIP_SECONDS = 10;
+
+
+
+    // ---------- ROOM / NETWORKING ----------
+  const roomSocketRef = useRef(null);
+  const [roomId, setRoomId] = useState(null);
+  const [roomStatus, setRoomStatus] = useState("disconnected"); 
+  // "disconnected" | "connecting" | "connected"
+  const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
+
+  const roomUserIdRef = useRef(
+    Math.random().toString(36).slice(2) + Date.now().toString(36)
+  );
+  const sendRoomMessage = (msg) => {
+    const ws = roomSocketRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+    const payload = {
+      ...msg,
+      userId: roomUserIdRef.current,
+      roomId,
+    };
+
+    try {
+      ws.send(JSON.stringify(payload));
+    } catch (e) {
+      console.warn("Failed to send room message", e);
+    }
+  };
+
+    const handleRoomMessage = (raw) => {
+    let msg;
+    try {
+      msg = JSON.parse(raw);
+    } catch {
+      return;
+    }
+
+    // ignore our own echoes
+    if (msg.userId && msg.userId === roomUserIdRef.current) return;
+
+    switch (msg.type) {
+      case "note": {
+        if (typeof msg.freq === "number") {
+          // play remote note but don't re-broadcast it
+          playNote(msg.freq, { source: "remote", waveformOverride: msg.waveform, effectOverride: msg.effect });
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  };
+
+    const connectToRoom = (roomCode) => {
+    const code = (roomCode || "").trim();
+    if (!code) return;
+
+    // Close any existing connection
+    if (roomSocketRef.current) {
+      try {
+        roomSocketRef.current.close();
+      } catch {}
+      roomSocketRef.current = null;
+    }
+
+    setRoomStatus("connecting");
+    setRoomId(null);
+
+    // Talk directly to the room server on port 8090
+    const wsUrl = `ws://localhost:8090/rooms?room=${encodeURIComponent(code)}`;
+    const ws = new WebSocket(wsUrl);
+
+
+    ws.onopen = () => {
+      roomSocketRef.current = ws;
+      setRoomId(code);
+      setRoomStatus("connected");
+      setIsRoomModalOpen(false); // snap back to main DAW view
+    };
+
+    ws.onmessage = (event) => {
+      handleRoomMessage(event.data);
+    };
+
+    ws.onerror = (err) => {
+      console.error("WebSocket room error", err);
+      // Only reset if this is still the active socket
+      if (roomSocketRef.current === ws || roomSocketRef.current === null) {
+        roomSocketRef.current = null;
+        setRoomStatus("disconnected");
+        // keep the modal open so the user can retry / change name
+      }
+    };
+
+    ws.onclose = () => {
+      if (roomSocketRef.current === ws) {
+        roomSocketRef.current = null;
+      }
+      setRoomStatus("disconnected");
+      setRoomId(null);
+    };
+  };
+
+
+
+  const disconnectRoom = () => {
+    if (roomSocketRef.current) {
+      try {
+        roomSocketRef.current.close();
+      } catch {}
+      roomSocketRef.current = null;
+    }
+    setRoomId(null);
+    setRoomStatus("disconnected");
+  };
+
+  const openRoomModal = () => setIsRoomModalOpen(true);
+  const closeRoomModal = () => setIsRoomModalOpen(false);
+
 
 const getStripSeconds = (track) => {
   const zoom = track.zoom || 1;
@@ -589,19 +713,29 @@ if (targetTrackId != null) {
   };
 
   // ---------- NOTE PLAYBACK ----------
-  const playNote = (freq) => {
+    const playNote = (
+    freq,
+    {
+      source = "local",
+      waveformOverride,
+      effectOverride,
+    } = {}
+  ) => {
     const ctx = getAudioContext();
     const masterGain = masterGainRef.current;
     if (!ctx || !masterGain) return;
 
+    const oscWaveform = waveformOverride || waveform;
+    const fx = effectOverride || effect;
+
     const oscillator = ctx.createOscillator();
     const gainNode = ctx.createGain();
 
-    oscillator.type = waveform;
+    oscillator.type = oscWaveform;
     oscillator.frequency.value = freq;
     gainNode.gain.value = 0.13;
 
-    if (effect === "reverb") {
+    if (fx === "reverb") {
       const convolver = getConvolver(ctx);
       oscillator.connect(gainNode);
       gainNode.connect(convolver);
@@ -611,10 +745,20 @@ if (targetTrackId != null) {
       gainNode.connect(masterGain);
     }
 
-    const duration = 0.5;
     oscillator.start();
-    oscillator.stop(ctx.currentTime + duration);
+    oscillator.stop(ctx.currentTime + 1.5);
+
+    // Broadcast to room if this came from local player
+    if (source === "local" && roomStatus === "connected") {
+      sendRoomMessage({
+        type: "note",
+        freq,
+        waveform: oscWaveform,
+        effect: fx,
+      });
+    }
   };
+
 
   const handleKeyMouseDown = (key) => {
     isMouseDownRef.current = true;
@@ -1257,6 +1401,31 @@ const handleGlobalPlay = () => {
     recorder.start();
   };
 
+    const handleRoomRecordToggle = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+
+    // If we’re already recording *room*, stop it
+    if (recorder.state === "recording" && isRoomRecording) {
+      recorder.stop();
+      setIsRoomRecording(false);
+      return;
+    }
+
+    // Don’t allow room recording if we’re doing a track-specific recording
+    if (recorder.state === "recording" && !isRoomRecording) {
+      console.warn("Already recording a track; stop that first.");
+      return;
+    }
+
+    // Start a new "room" recording: no specific track target
+    recordingTargetTrackIdRef.current = null;
+    recordStartTimeRef.current = performance.now();
+    recorder.start();
+    setIsRoomRecording(true);
+  };
+
+
   // ---------- TRACK ZOOM + ADD ----------
   const addTrack = () => {
     setTracks((prev) => [
@@ -1404,5 +1573,14 @@ const handleGlobalPlay = () => {
     activeKeyIds,
     handleKeyMouseDown,
     handleKeyMouseEnter,
+    roomId,
+    roomStatus,
+    isRoomModalOpen,
+    openRoomModal,
+    closeRoomModal,
+    connectToRoom,
+    disconnectRoom,
+    handleRoomRecordToggle,
+    isRoomRecording,
   };
 }

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "seed": "node seedJobs.js"
+    "seed": "node seedJobs.js",
+    "room-server": "node roomsServer.js"
   },
   "dependencies": {
     "axios": "^1.13.2",

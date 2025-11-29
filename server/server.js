@@ -1,90 +1,84 @@
-// server/server.js
+// server.js
+
 import express from "express";
-import mongoose from "mongoose";
-import cors from "cors";
-import dotenv from "dotenv";
-import jobsRouter from "./routes/jobs.js";
-import path from "path";
-import { fileURLToPath } from "url";
-import multer from "multer";
-import fs from "fs";
-
-// so we can build paths
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Always load server/.env
-dotenv.config({ path: path.join(__dirname, ".env") });
+import http from "http";
+import { WebSocketServer } from "ws";
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
+// You can add normal routes if you want, e.g.
+// app.get("/health", (req, res) => res.send("ok"));
 
-const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/jobsdb";
-const PORT = process.env.PORT || 8080;
+// Create a raw HTTP server that wraps Express:
+const server = http.createServer(app);
 
-// ---------- DATABASE ----------
-mongoose
-  .connect(MONGO_URI)
-  .then(() => {
-    console.log("✅ Connected to MongoDB");
-  })
-  .catch((err) => {
-    console.error("Mongo connection error:", err);
-    process.exit(1);
-  });
+// 1) Create a WebSocketServer in "noServer" mode.
+//    That means *we* decide when to upgrade (in server.on("upgrade")).
+const wss = new WebSocketServer({ noServer: true });
 
-// ---------- JOB ROUTES ----------
-app.use("/api/jobs", jobsRouter);
+// 2) This holds roomName -> Set of connected sockets
+const rooms = new Map();
 
-// ---------- RECORDING STORAGE SETUP ----------
-const recordingsDir = path.join(__dirname, "recordings");
-if (!fs.existsSync(recordingsDir)) {
-  fs.mkdirSync(recordingsDir);
-}
+// 3) Handle HTTP upgrade requests (this is how WebSockets start)
+server.on("upgrade", (req, socket, head) => {
+  const { url } = req;
 
-// Multer storage for uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, recordingsDir);
-  },
-  filename: (req, file, cb) => {
-    const timestamp = Date.now();
-    cb(null, `recording_${timestamp}.wav`);
-  },
-});
-
-const upload = multer({ storage });
-
-// Upload audio route
-app.post("/api/recordings/upload", upload.single("audio"), (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ error: "No file uploaded" });
+  // Only allow upgrades for /rooms
+  if (!url.startsWith("/rooms")) {
+    socket.destroy();
+    return;
   }
-  res.json({ filename: req.file.filename });
-});
 
-// List recordings
-app.get("/api/recordings", (req, res) => {
-  fs.readdir(recordingsDir, (err, files) => {
-    if (err) {
-      console.error("Error reading recordings directory:", err);
-      return res.status(500).json({ error: "Unable to read files" });
-    }
-    res.json(files);
+  // Parse ?room=something from the URL
+  const search = url.split("?", 2)[1] || "";
+  const params = new URLSearchParams(search);
+  const roomName = (params.get("room") || "").trim();
+
+  // If no room name, refuse the connection
+  if (!roomName) {
+    socket.destroy();
+    return;
+  }
+
+  // Complete the WebSocket handshake
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    // We pass roomName as a second argument to "connection"
+    wss.emit("connection", ws, roomName);
   });
 });
 
-// Serve recordings statically for download
-app.use("/recordings", express.static(recordingsDir));
+// 4) Fired once a WebSocket connection is accepted
+wss.on("connection", (ws, roomName) => {
+  // Get or create the room Set
+  let clients = rooms.get(roomName);
+  if (!clients) {
+    clients = new Set();
+    rooms.set(roomName, clients);
+  }
+  clients.add(ws);
 
-// ---------- ROOT ----------
-app.get("/", (req, res) => {
-  res.send("Job API is running");
+  // When this client sends a message...
+  ws.on("message", (data) => {
+    // ...broadcast it to everyone else in the same room
+    for (const client of clients) {
+      if (client !== ws && client.readyState === client.OPEN) {
+        client.send(data); // forward as-is (JSON string)
+      }
+    }
+  });
+
+  // When this client disconnects...
+  ws.on("close", () => {
+    clients.delete(ws);
+    // If room is empty, clean it up
+    if (clients.size === 0) {
+      rooms.delete(roomName);
+    }
+  });
 });
 
-// ---------- START ----------
-app.listen(PORT, () => {
-  console.log(`✅ Server running at http://localhost:${PORT}`);
+// 5) Start the HTTP+WS server
+const PORT = process.env.PORT || 8080;
+server.listen(PORT, () => {
+  console.log(`HTTP+WS server listening on http://localhost:${PORT}`);
 });
