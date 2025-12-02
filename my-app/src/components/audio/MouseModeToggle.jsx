@@ -7,7 +7,7 @@ export default function MouseModeToggle({ mouseMode, setMouseMode }) {
         marginTop: "0.5rem",
         marginBottom: "0.25rem",
         fontSize: "0.8rem",
-        color: "#ccc",
+        color: "#000000ff",
         display: "flex",
         alignItems: "center",
         gap: "0.75rem",
@@ -31,6 +31,15 @@ export default function MouseModeToggle({ mouseMode, setMouseMode }) {
           style={{ marginRight: "0.25rem" }}
         />
         Move recordings between tracks
+      </label>
+      <label>
+        <input
+          type="radio"
+          checked={mouseMode === "delete"}
+          onChange={() => setMouseMode("delete")}
+          style={{ marginRight: "0.25rem" }}
+        />
+        Delete tracks
       </label>
     </div>
   );

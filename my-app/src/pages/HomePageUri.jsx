@@ -1,32 +1,11 @@
 // src/pages/SearchPage.jsx
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
-import useJobs from "../hooks/useJobs";
-import SearchBar from "../components/SearchBar/SearchBar";
-import "../styles/SearchPage.css";
 
 export default function HomePage() {
-  const {
-    jobs,
-    loading,
-    error,
-    search,
-    page,
-    totalPages,
-    total,
-    goToPage,
-  } = useJobs();
 
-  useEffect(() => {
-    // initial load with no filters
-    search({}, 1);
-  }, []);
 
-  const handleSearch = (filters) => {
-    search(filters, 1);
-  };
-
-  const pageSize = 25;
+  
 
   return (
     <div className="page-container">
