@@ -11,6 +11,27 @@ const wss = new WebSocketServer({ noServer: true });
 // Map of roomName -> Set of ws clients
 const rooms = new Map();
 
+// Helper: broadcast usernames + count for a single room
+const broadcastOccupancy = (roomName) => {
+  const clients = rooms.get(roomName);
+  if (!clients || clients.size === 0) return;
+
+  const payload = JSON.stringify({
+    type: "occupancy",
+    room: roomName,
+    count: clients.size,
+    usernames: Array.from(clients).map(
+      (client) => client.username || "Anonymous"
+    ),
+  });
+
+  for (const client of clients) {
+    if (client.readyState === client.OPEN) {
+      client.send(payload);
+    }
+  }
+};
+
 server.on("upgrade", (req, socket, head) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
@@ -45,14 +66,29 @@ wss.on("connection", (ws, roomName) => {
 
   console.log(`Client joined room "${roomName}", size=${clients.size}`);
 
-  ws.on("message", (data) => {
-    // Just broadcast raw data to everyone else in the room
-    for (const client of clients) {
-      if (client !== ws && client.readyState === client.OPEN) {
-        client.send(data);
-      }
+ ws.on("message", (data) => {
+  let msg;
+  try {
+    msg = JSON.parse(data.toString());
+  } catch {
+    msg = null;
+  }
+
+  // Example: handle "join" here if you’re doing usernames
+  if (msg && msg.type === "join" && typeof msg.username === "string") {
+    ws.username = msg.username.trim() || "Anonymous";
+    // (optionally broadcast occupancy here)
+    return; // don’t forward "join" as a note
+  }
+
+  // 🔊 IMPORTANT: forward "note" and any other musical messages
+  for (const client of clients) {
+    if (client !== ws && client.readyState === client.OPEN) {
+      client.send(data);
     }
-  });
+  }
+});
+
 
   ws.on("close", () => {
     clients.delete(ws);
@@ -60,6 +96,9 @@ wss.on("connection", (ws, roomName) => {
     if (clients.size === 0) {
       rooms.delete(roomName);
       console.log(`Deleted empty room "${roomName}"`);
+    } else {
+      // Update occupancy for remaining users
+      broadcastOccupancy(roomName);
     }
   });
 });

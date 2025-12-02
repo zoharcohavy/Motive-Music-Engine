@@ -34,7 +34,8 @@ export default function ToneTestPage() {
     trackCanvasRefs,
     activeKeyIds,
     handleKeyMouseDown,
-    handleKeyMouseEnter,roomId,
+    handleKeyMouseEnter,
+    roomId,
     roomStatus,
     isRoomModalOpen,
     openRoomModal,
@@ -43,7 +44,9 @@ export default function ToneTestPage() {
     disconnectRoom,
     handleRoomRecordToggle,
     isRoomRecording,
+    roomUsernames,
   } = useToneTestLogic();
+
 
     return (
     <div className="tone-test-page" style={{ padding: "1rem" }}>
@@ -54,73 +57,22 @@ export default function ToneTestPage() {
         recordingsError={recordingsError}
       />
 
-      {/* Room controls under recordings */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "0.5rem",
-          marginBottom: "0.5rem",
-          fontSize: "0.8rem",
-        }}
-      >
-        {/* Left: room label */}
-        <div style={{ opacity: 0.8 }}>
-          {roomStatus === "connected" && roomId ? (
-            <>
-              Room: <strong>{roomId}</strong>
-            </>
-          ) : (
-            <>Not in a room</>
-          )}
-        </div>
-
-        {/* Right: buttons */}
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
-          <button
-            type="button"
-            onClick={openRoomModal}
-            style={{
-              padding: "0.2rem 0.6rem",
-              borderRadius: "4px",
-              border: "1px solid #444",
-              background:
-                roomStatus === "connected" ? "#133" : "#222",
-              color: "#fff",
-              cursor: "pointer",
-            }}
-          >
-            {roomStatus === "connected" ? "Change Room" : "Connect to Room"}
-          </button>
-
-          {roomStatus === "connected" && (
-            <button
-              type="button"
-              onClick={handleRoomRecordToggle}
-              style={{
-                padding: "0.2rem 0.6rem",
-                borderRadius: "4px",
-                border: "1px solid #644",
-                background: isRoomRecording ? "#b22" : "#331111",
-                color: "#fff",
-                cursor: "pointer",
-              }}
-            >
-              {isRoomRecording ? "⏹ Stop Room Record" : "⏺ Record Room"}
-            </button>
-          )}
-        </div>
-      </div>
-
-
-      {/* Top controls (waveform + effect) */}
+      {/* Top controls (waveform + effect + room controls) */}
       <TopControls
         waveform={waveform}
         setWaveform={setWaveform}
         effect={effect}
         setEffect={setEffect}
+        roomId={roomId}
+        roomStatus={roomStatus}
+        openRoomModal={openRoomModal}
+        disconnectRoom={disconnectRoom}
+        handleRoomRecordToggle={handleRoomRecordToggle}
+        isRoomRecording={isRoomRecording}
+        roomUsernames={roomUsernames}
       />
+
+
 
 
       {/* Spacer */}
@@ -171,13 +123,13 @@ export default function ToneTestPage() {
         onMouseEnterKey={handleKeyMouseEnter}
       />
       <RoomModal
-  isOpen={isRoomModalOpen}
-  onClose={closeRoomModal}
-  roomStatus={roomStatus}
-  roomId={roomId}
-  connectToRoom={connectToRoom}
-  disconnectRoom={disconnectRoom}
-/>
+        isOpen={isRoomModalOpen}
+        onClose={closeRoomModal}
+        roomStatus={roomStatus}
+        roomId={roomId}
+        connectToRoom={connectToRoom}
+        disconnectRoom={disconnectRoom}
+      />
 
     </div>
   );
