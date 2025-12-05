@@ -5,209 +5,77 @@ import {
   getKeyIndexForKeyboardChar,
 } from "./constants";
 import { drawGenericWave } from "./drawUtils";
-
-
+import { useRoom } from "./useRoom";
+import { useTrackModel } from "./useTrackModel";
 
 export function useToneTestLogic() {
-  // ---------- REFS ----------
-  const audioCtxRef = useRef(null);
-  const analyserRef = useRef(null);
-  const masterGainRef = useRef(null);
-  const convolverRef = useRef(null);
-  const recordDestRef = useRef(null);
-  const mediaRecorderRef = useRef(null);
-  const recordingChunksRef = useRef([]);
-  const isMouseDownRef = useRef(false);
-  const animationFrameRef = useRef(null);
-  const waveCanvasRef = useRef(null);
-  const zoomRef = useRef(1);
-  const trackCanvasRefs = useRef({}); // { [trackId]: HTMLCanvasElement | null }
-  const recordingTargetTrackIdRef = useRef(null);
-  const recordStartTimeRef = useRef(null);
-  const recordDurationRef = useRef(0);
-  const recordInitialHeadPosRef = useRef(0);
-  const currentAudioRef = useRef(null);
-  const draggingHeadTrackIdRef = useRef(null);
-  const draggingClipRef = useRef(null); // { trackId, clipId, offsetTime }
-  const tracksRef = useRef([]);
-  const activeRecordingTrackIdRef = useRef(null);
-  const isTransportPlayingRef = useRef(false);
-  const transportAnimationFrameRef = useRef(null);
-  const transportTrackIdRef = useRef(null);
-  const transportStartWallTimeRef = useRef(null);
-  const transportStartHeadTimeRef = useRef(0);
-  const currentClipIdRef = useRef(null);
-  const transportActiveClipsRef = useRef(new Map()); 
-  // key: `${trackId}:${clipId}` -> HTMLAudioElement
+// ---------- REFS ----------
+const isMouseDownRef = useRef(false);
+const animationFrameRef = useRef(null);
+const waveCanvasRef = useRef(null);
+const zoomRef = useRef(1);
+const recordingTargetTrackIdRef = useRef(null);
+const recordStartTimeRef = useRef(null);
+const recordDurationRef = useRef(0);
+const recordInitialHeadPosRef = useRef(0);
+const currentAudioRef = useRef(null);
+const draggingHeadTrackIdRef = useRef(null);
+const draggingClipRef = useRef(null); // { trackId, clipId, offsetTime }
+const activeRecordingTrackIdRef = useRef(null);
+const isTransportPlayingRef = useRef(false);
+const transportAnimationFrameRef = useRef(null);
+const transportTrackIdRef = useRef(null);
+const transportStartWallTimeRef = useRef(null);
+const transportStartHeadTimeRef = useRef(0);
+const currentClipIdRef = useRef(null);
+const transportActiveClipsRef = useRef(new Map());
+// audio-related refs (needed by setupAudioContext / getAudioContext)
+const audioCtxRef = useRef(null);
+const analyserRef = useRef(null);
+const masterGainRef = useRef(null);
+const convolverRef = useRef(null);
+const recordDestRef = useRef(null);
+const mediaRecorderRef = useRef(null);
+const recordingChunksRef = useRef([]);
 
+// key: `${trackId}:${clipId}` -> HTMLAudioElement
+// ---------- STATE ----------
+const [waveform, setWaveform] = useState("sine");
+const [effect, setEffect] = useState("none");
+const [recordings, setRecordings] = useState([]);
+const [recordingsError, setRecordingsError] = useState(null);
+const [isRoomRecording, setIsRoomRecording] = useState(false);
+const [roomOccupantCount, setRoomOccupantCount] = useState(0); // others in the room
 
+const BASE_STRIP_SECONDS = 10;
 
+const trackApi = useTrackModel({ BASE_STRIP_SECONDS });
 
-
-
-  // ---------- STATE ----------
-  const [waveform, setWaveform] = useState("sine");
-  const [effect, setEffect] = useState("none");
-  const [recordings, setRecordings] = useState([]);
-  const [recordingsError, setRecordingsError] = useState(null);
-  const [isRoomRecording, setIsRoomRecording] = useState(false);
-  const [roomOccupantCount, setRoomOccupantCount] = useState(0); // others in the room
-
-  const BASE_STRIP_SECONDS = 10;
-
-
-
-    // ---------- ROOM / NETWORKING ----------
-  const roomSocketRef = useRef(null);
-  const [roomId, setRoomId] = useState(null);
-  const [roomStatus, setRoomStatus] = useState("disconnected"); 
-  // "disconnected" | "connecting" | "connected"
-  const [isRoomModalOpen, setIsRoomModalOpen] = useState(false);
-  const roomUserIdRef = useRef(
-    Math.random().toString(36).slice(2) + Date.now().toString(36)
-  );
-  const [roomUsernames, setRoomUsernames] = useState([]);
-
-  const sendRoomMessage = (msg) => {
-    const ws = roomSocketRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-    const payload = {
-      ...msg,
-      userId: roomUserIdRef.current,
-      roomId,
-    };
-
-    try {
-      ws.send(JSON.stringify(payload));
-    } catch (e) {
-      console.warn("Failed to send room message", e);
-    }
-  };
-
-const handleRoomMessage = (raw) => {
-  let msg;
-  try {
-    msg = JSON.parse(raw);
-  } catch {
-    console.warn("Room message is not valid JSON:", raw);
-    return;
-  }
-
-  // Ignore our own echoes only
-  if (msg.userId && msg.userId === roomUserIdRef.current) {
-    return;
-  }
-
-  if (!msg.type) {
-    console.warn("Room message missing type:", msg);
-    return;
-  }
-
-  switch (msg.type) {
-    case "note": {
-      if (typeof msg.freq === "number") {
-        console.log("[room] playing remote note", msg.freq);
-        playNote(msg.freq, {
-          source: "remote",
-          waveformOverride: msg.waveform,
-          effectOverride: msg.effect,
-        });
-      } else {
-        console.warn("Room note missing freq:", msg);
-      }
-      break;
-    }
-
-    
-    case "occupancy": {
-      if (Array.isArray(msg.usernames)) {
-        // full list from server
-        setRoomUsernames(msg.usernames);
-
-        // optional: still keep a numeric "others" count if you ever want it
-        const others = Math.max(0, msg.usernames.length - 1);
-        setRoomOccupantCount(others);
-      }
-      break;
-    }
-
-    default:
-      console.log("[room] unhandled message type:", msg.type, msg);
-      break;
-  }
-};
-
-
-const connectToRoom = (roomCode, username) => {
-  const code = (roomCode || "").trim();
-  const name = (username || "").trim();
-  if (!code || !name) return;
-
-  // Close any existing connection
-  if (roomSocketRef.current) {
-    try {
-      roomSocketRef.current.close();
-    } catch {}
-    roomSocketRef.current = null;
-  }
-
-  setRoomStatus("connecting");
-  setRoomId(null);
-  setRoomUsernames([]);
-
-  const wsUrl = `ws://localhost:8090/rooms?room=${encodeURIComponent(code)}`;
-  const ws = new WebSocket(wsUrl);
-
-  ws.onopen = () => {
-    roomSocketRef.current = ws;
-    setRoomId(code);
-    setRoomStatus("connected");
-    setIsRoomModalOpen(false);
-
-    // Tell the server who we are
-    sendRoomMessage({
-      type: "join",
-      username: name,
-    });
-  };
-
-  ws.onmessage = (event) => {
-    handleRoomMessage(event.data);
-  };
-
-   ws.onerror = (err) => {
-    console.error("WebSocket room error", err);
-  };
-
-  ws.onclose = () => {
-    if (roomSocketRef.current === ws) {
-      roomSocketRef.current = null;
-    }
-    setRoomStatus("disconnected");
-    setRoomId(null);
-    setRoomUsernames([]);
-  };
-};
-
-
-
-
-
-const disconnectRoom = () => {
-  if (roomSocketRef.current) {
-    try {
-      roomSocketRef.current.close();
-    } catch {}
-    roomSocketRef.current = null;
-  }
-  setRoomId(null);
-  setRoomStatus("disconnected");
-  setRoomUsernames([]);
-};
-
-  const openRoomModal = () => setIsRoomModalOpen(true);
-  const closeRoomModal = () => setIsRoomModalOpen(false);
+const {
+  tracks,
+  setTracks,
+  nextTrackId,
+  setNextTrackId,
+  globalZoom,
+  setGlobalZoom,
+  activeRecordingTrackId,
+  setActiveRecordingTrackId,
+  selectedTrackId,
+  setSelectedTrackId,
+  mouseMode,
+  setMouseMode,
+  activeKeyIds,
+  setActiveKeyIds,
+  tracksRef,
+  trackCanvasRefs,
+  // getStripSeconds,
+  // addTrack,
+  // changeZoom,
+  // moveTrackRecording,
+  // handleTrackStripMouseDown,
+  // handleTrackStripMouseMove,
+  stopDragging,
+} = trackApi;
 
 
 const getStripSeconds = (track) => {
@@ -230,362 +98,177 @@ const willOverlap = (clips, candidate, ignoreId = null) => {
   });
 };
 
+// keep refs synced
+// ---------- LIVE WAVEFORM DRAWING ----------
+useEffect(() => {
+  const canvas = waveCanvasRef.current;
+  if (!canvas) return;
 
+  const ctx2d = canvas.getContext("2d");
+  if (!ctx2d) return;
 
- const [tracks, setTracks] = useState([
-  {
-    id: 0,
-    zoom: 1,
-    headPos: 0,          // 0..1 across the strip
-    clips: [],           // [{id, url, duration, startFrac, image}]
-    // keep old fields for now so nothing explodes during transition:
-    hasRecording: false,
-    recordingUrl: null,
-    recordingDuration: 0,
-    tapeHeadPos: 0,
-    recordingImage: null,
-    clipStartPos: 0,
-  },
-]);
+  // Make sure AudioContext and Analyser exist
+  const audioCtx = getAudioContext();
+  if (!audioCtx) return;
+  const analyser = analyserRef.current;
+  if (!analyser) return;
 
-  const [nextTrackId, setNextTrackId] = useState(1);
-  const [globalZoom, setGlobalZoom] = useState(1);
-  const [activeRecordingTrackId, setActiveRecordingTrackId] = useState(null);
-  const [selectedTrackId, setSelectedTrackId] = useState(0);
-  const [mouseMode, setMouseMode] = useState("head");
-  const [activeKeyIds, setActiveKeyIds] = useState([]);
+  // Prepare buffer to read time-domain data
+  const bufferLength = analyser.fftSize;
+  const dataArray = new Uint8Array(bufferLength);
 
-  // keep refs synced
-    // ---------- LIVE WAVEFORM DRAWING ----------
-  useEffect(() => {
-    const canvas = waveCanvasRef.current;
-    if (!canvas) return;
+  let frameId;
 
-    const ctx2d = canvas.getContext("2d");
-    if (!ctx2d) return;
+  const draw = () => {
+    if (!waveCanvasRef.current) return;
 
-    // Make sure AudioContext and Analyser exist
-    const audioCtx = getAudioContext();
-    if (!audioCtx) return;
-    const analyser = analyserRef.current;
-    if (!analyser) return;
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
 
-    // Prepare buffer to read time-domain data
-    const bufferLength = analyser.fftSize;
-    const dataArray = new Uint8Array(bufferLength);
-
-    let frameId;
-
-    const draw = () => {
-      if (!waveCanvasRef.current) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
-
-      const width = rect.width || canvas.width || 0;
-      const height = rect.height || canvas.height || 0;
-      if (width <= 0 || height <= 0) {
-        frameId = requestAnimationFrame(draw);
-        return;
-      }
-
-      // Resize backing store if needed
-      if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
-      }
-
-      ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      // Get the current waveform
-      analyser.getByteTimeDomainData(dataArray);
-
-      // Clear background
-      ctx2d.clearRect(0, 0, width, height);
-      ctx2d.fillStyle = "#111";
-      ctx2d.fillRect(0, 0, width, height);
-
-      // Draw the waveform
-      ctx2d.lineWidth = 2;
-      ctx2d.strokeStyle = "#4af"; // cyan-ish line
-      ctx2d.beginPath();
-
-      const sliceWidth = width / bufferLength;
-      let x = 0;
-
-      for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 128.0;   // 0..2
-        const y = (v * 0.5) * height;     // center around middle-ish
-
-        if (i === 0) {
-          ctx2d.moveTo(x, y);
-        } else {
-          ctx2d.lineTo(x, y);
-        }
-
-        x += sliceWidth;
-      }
-
-      ctx2d.stroke();
-
+    const width = rect.width || canvas.width || 0;
+    const height = rect.height || canvas.height || 0;
+    if (width <= 0 || height <= 0) {
       frameId = requestAnimationFrame(draw);
-      animationFrameRef.current = frameId;
-    };
+      return;
+    }
 
-    draw();
+    // Resize backing store if needed
+    if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+    }
 
-    return () => {
-      if (frameId) {
-        cancelAnimationFrame(frameId);
-      }
-    };
-  }, [waveform, effect]);
+    ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  useEffect(() => {
-    tracksRef.current = tracks;
-  }, [tracks]);
+    // Get the current waveform
+    analyser.getByteTimeDomainData(dataArray);
 
-  useEffect(() => {
-    zoomRef.current = globalZoom;
-  }, [globalZoom]);
+    // Clear background
+    ctx2d.clearRect(0, 0, width, height);
+    ctx2d.fillStyle = "#111";
+    ctx2d.fillRect(0, 0, width, height);
 
-  useEffect(() => {
-    activeRecordingTrackIdRef.current = activeRecordingTrackId;
-  }, [activeRecordingTrackId]);
+    // Draw the waveform
+    ctx2d.lineWidth = 2;
+    ctx2d.strokeStyle = "#4af"; // cyan-ish line
+    ctx2d.beginPath();
 
-    // ---------- TRACK DRAWING ----------
-  // Draw tracks (clips and tape heads) into canvases whenever tracks or zoom change
-  // ---------- TAPE-HEAD ANIMATION (RECORDING) ----------
-  useEffect(() => {
-    let frameId = null;
+    const sliceWidth = width / bufferLength;
+    let x = 0;
 
-    const step = () => {
-      const recorder = mediaRecorderRef.current;
-      const isRecording = recorder && recorder.state === "recording";
-      const targetTrackId = recordingTargetTrackIdRef.current;
+    for (let i = 0; i < bufferLength; i++) {
+      const v = dataArray[i] / 128.0;   // 0..2
+      const y = (v * 0.5) * height;     // center around middle-ish
 
-      if (
-        isRecording &&
-        targetTrackId != null &&
-        recordStartTimeRef.current != null
-      ) {
-        // How long we've been recording
-        const now = performance.now();
-        const elapsedSec =
-          (now - recordStartTimeRef.current) / 1000;
-
-        // Keep this in sync with what onstop uses
-        recordDurationRef.current = elapsedSec;
-
-        const tracksNow = tracksRef.current || [];
-        const track = tracksNow.find((t) => t.id === targetTrackId);
-
-        if (track) {
-          const stripSeconds = getStripSeconds(track);
-          const startFrac = recordInitialHeadPosRef.current || 0;
-
-          // Move the head to the right at real-time speed
-          let headPos = startFrac;
-          if (stripSeconds > 0) {
-            headPos = startFrac + elapsedSec / stripSeconds;
-          }
-
-          // Clamp to the right edge
-          if (headPos >= 1) {
-            headPos = 1;
-            // Stop recording if we hit the end of the strip
-            if (recorder.state === "recording") {
-              recorder.stop();
-            }
-          }
-
-          // Check if we've run into an existing clip on this track
-          const stripTime = headPos * stripSeconds;
-          const existingClips = track.clips || [];
-          const collided = existingClips.find((c) => {
-            const start = c.startTime;
-            const end = c.startTime + c.duration;
-            return stripTime >= start && stripTime <= end;
-          });
-
-          if (collided && recorder.state === "recording") {
-            // Stop immediately when we reach a different clip
-            recorder.stop();
-          }
-
-          // Apply the new head position to React state
-          setTracks((prev) =>
-            prev.map((t) =>
-              t.id === targetTrackId ? { ...t, headPos } : t
-            )
-          );
-        }
+      if (i === 0) {
+        ctx2d.moveTo(x, y);
+      } else {
+        ctx2d.lineTo(x, y);
       }
 
-      frameId = window.requestAnimationFrame(step);
-      animationFrameRef.current = frameId;
-    };
+      x += sliceWidth;
+    }
 
-    frameId = window.requestAnimationFrame(step);
+    ctx2d.stroke();
+
+    frameId = requestAnimationFrame(draw);
     animationFrameRef.current = frameId;
+  };
 
-    return () => {
-      if (frameId) {
-        window.cancelAnimationFrame(frameId);
-      }
-    };
-  }, [setTracks]);
-  // ---------- TRACK DRAWING ----------
-  useEffect(() => {
-    const refs = trackCanvasRefs.current;
-    if (!refs) return;
+  draw();
 
-    tracks.forEach((track) => {
-      const canvas = refs[track.id];
-      if (!canvas) return;
+  return () => {
+    if (frameId) {
+      cancelAnimationFrame(frameId);
+    }
+  };
+}, [waveform, effect]);
 
-      const rect = canvas.getBoundingClientRect();
-      const dpr = window.devicePixelRatio || 1;
+useEffect(() => {
+  zoomRef.current = globalZoom;
+}, [globalZoom]);
 
-      const width = rect.width || canvas.width || 0;
-      const height = rect.height || canvas.height || 56;
-      if (width <= 0 || height <= 0) return;
+useEffect(() => {
+  activeRecordingTrackIdRef.current = activeRecordingTrackId;
+}, [activeRecordingTrackId]);
 
-      // Resize backing store to match CSS size * devicePixelRatio
-      if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
-      }
+// ---------- TRACK DRAWING ----------
+// Draw tracks (clips and tape heads) into canvases whenever tracks or zoom change
+// ---------- TAPE-HEAD ANIMATION (RECORDING) ----------
+useEffect(() => {
+  let frameId = null;
 
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+  const step = () => {
+  const recorder = mediaRecorderRef.current;
+  const isRecording = recorder && recorder.state === "recording";
+  const targetTrackId = recordingTargetTrackIdRef.current;
 
-      // draw in CSS pixels
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (isRecording && (targetTrackId != null) && (recordStartTimeRef.current != null)) {
+    // How long we've been recording
+    const now = performance.now();
+    const elapsedSec = (now - recordStartTimeRef.current) / 1000;
 
-      // Clear & background
-      ctx.clearRect(0, 0, width, height);
-      ctx.fillStyle = "#111";
-      ctx.fillRect(0, 0, width, height);
+    // Keep this in sync with what onstop uses
+    recordDurationRef.current = elapsedSec;
 
+    const tracksNow = tracksRef.current || [];
+    const track = tracksNow.find((t) => t.id === targetTrackId);
+
+    if (track) {
       const stripSeconds = getStripSeconds(track);
+      const startFrac = recordInitialHeadPosRef.current || 0;
 
-      // ---- Draw clips if present ----
-      if (track.clips && track.clips.length > 0) {
-        track.clips.forEach((clip) => {
-          const startFrac =
-            stripSeconds > 0 ? clip.startTime / stripSeconds : 0;
-          const durFrac =
-            stripSeconds > 0 ? clip.duration / stripSeconds : 0;
-
-          const startX = startFrac * width;
-          const clipWidth = Math.min(1, durFrac) * width;
-
-          if (clip.image) {
-            const img = new Image();
-            img.src = clip.image;
-            try {
-              const srcWidth = img.width || clipWidth;
-              ctx.save();
-              ctx.beginPath();
-              ctx.rect(startX, 0, clipWidth, height);
-              ctx.clip();
-              ctx.drawImage(
-                img,
-                0,
-                0,
-                srcWidth,
-                img.height || height,
-                startX,
-                0,
-                clipWidth,
-                height
-              );
-              ctx.restore();
-            } catch (e) {
-              ctx.save();
-              ctx.translate(startX, 0);
-              drawGenericWave(ctx, clipWidth, height, 0.9);
-              ctx.restore();
-            }
-          } else {
-            ctx.save();
-            ctx.translate(startX, 0);
-            drawGenericWave(ctx, clipWidth, height, 0.9);
-            ctx.restore();
-          }
-
-          // outline
-          ctx.strokeStyle = "rgba(255,255,255,0.7)";
-          ctx.lineWidth = 2;
-          ctx.strokeRect(startX + 1, 1, clipWidth - 2, height - 2);
-        });
-      } else if (track.hasRecording && track.recordingDuration) {
-        // ---- Legacy: single recording block ----
-        const clipStartFrac = track.clipStartPos || 0;
-        const clipDuration = track.recordingDuration;
-        const durFrac =
-          stripSeconds > 0 ? clipDuration / stripSeconds : 1;
-        const startX = clipStartFrac * width;
-        const clipWidth = Math.min(1, durFrac) * width;
-
-        if (track.recordingImage) {
-          const img = new Image();
-          img.src = track.recordingImage;
-          try {
-            const srcWidth = img.width || clipWidth;
-            ctx.save();
-            ctx.beginPath();
-            ctx.rect(startX, 0, clipWidth, height);
-            ctx.clip();
-            ctx.drawImage(
-              img,
-              0,
-              0,
-              srcWidth,
-              img.height || height,
-              startX,
-              0,
-              clipWidth,
-              height
-            );
-            ctx.restore();
-          } catch (e) {
-            ctx.save();
-            ctx.translate(startX, 0);
-            drawGenericWave(ctx, clipWidth, height, 0.9);
-            ctx.restore();
-          }
-        } else {
-          ctx.save();
-          ctx.translate(startX, 0);
-          drawGenericWave(ctx, clipWidth, height, 0.9);
-          ctx.restore();
-        }
-
-        ctx.strokeStyle = "rgba(255,255,255,0.7)";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(startX + 1, 1, clipWidth - 2, height - 2);
+      // Move the head to the right at real-time speed
+      let headPos = startFrac;
+      if (stripSeconds > 0) {
+        headPos = startFrac + elapsedSec / stripSeconds;
       }
 
-      // ---- Tape head ----
-      const headPos =
-        track.headPos != null ? track.headPos : track.tapeHeadPos || 0;
-      const headX = headPos * width;
+      // Clamp to the right edge
+      if (headPos >= 1) {
+        headPos = 1;
+        // Stop recording if we hit the end of the strip
+        if (recorder.state === "recording") {
+          recorder.stop();
+        }
+      }
 
-      // subtle fill before the head
-      ctx.fillStyle = "rgba(255,255,255,0.04)";
-      ctx.fillRect(0, 0, headX, height);
+      // Check if we've run into an existing clip on this track
+      const stripTime = headPos * stripSeconds;
+      const existingClips = track.clips || [];
+      const collided = existingClips.find((c) => {
+      const start = c.startTime;
+      const end = c.startTime + c.duration;
+      return stripTime >= start && stripTime <= end;
+      });
 
-      // yellow head line
-      ctx.strokeStyle = "#ffff00";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(headX, 0);
-      ctx.lineTo(headX, height);
-      ctx.stroke();
-    });
-  }, [tracks]);
+      if (collided && recorder.state === "recording") {
+        // Stop immediately when we reach a different clip
+        recorder.stop();
+      }
+
+      // Apply the new head position to React state
+      setTracks((prev) =>
+        prev.map((t) =>
+          t.id === targetTrackId ? { ...t, headPos } : t
+        )
+      );
+    }
+  }
+
+  frameId = window.requestAnimationFrame(step);
+  animationFrameRef.current = frameId;
+};
+
+frameId = window.requestAnimationFrame(step);
+animationFrameRef.current = frameId;
+
+return () => {
+  if (frameId) {
+    window.cancelAnimationFrame(frameId);
+  }
+};
+}, [setTracks]);
 
   // ---------- AUDIO SETUP ----------
   const setupAudioContext = () => {
@@ -808,6 +491,27 @@ if (targetTrackId != null) {
       playNote(key.freq);
     }
   };
+  // --- Room -> audio bridge: how to play a remote note ---
+  const handleRemoteNote = ({ freq, waveform, effect }) => {
+    if (typeof freq !== "number") return;
+    playNote(freq, {
+      source: "remote",
+      waveformOverride: waveform,
+      effectOverride: effect,
+    });
+  };
+  // --- Room hook: all WebSocket + room state ---
+  const {
+    roomId,
+    roomStatus,
+    roomUsernames,
+    isRoomModalOpen,
+    openRoomModal,
+    closeRoomModal,
+    connectToRoom,
+    disconnectRoom,
+    sendRoomMessage,
+  } = useRoom({ onRemoteNote: handleRemoteNote });
 
   // ---------- MOUSE UP / SCRUB PLAY ----------
   const handleMouseUp = () => {
