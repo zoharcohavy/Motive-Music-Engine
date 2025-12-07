@@ -18,7 +18,7 @@ export function useTrackModel({ BASE_STRIP_SECONDS }) {
   const [tracks, setTracks] = useState([
     {
       id: 0,
-      zoom: 1,
+      zoom: 1, //fix later
       headPos: 0, // 0..1 across the strip
       clips: [], // [{ id, url, duration, startTime, image }]
       // legacy fields (kept so old code doesn’t crash if it still references them):
@@ -33,8 +33,7 @@ export function useTrackModel({ BASE_STRIP_SECONDS }) {
 
   const [nextTrackId, setNextTrackId] = useState(1);
   const [globalZoom, setGlobalZoom] = useState(1);
-  const [activeRecordingTrackId, setActiveRecordingTrackId] =
-    useState(null);
+  const [activeRecordingTrackId, setActiveRecordingTrackId] = useState(null);
   const [selectedTrackId, setSelectedTrackId] = useState(0);
   const [mouseMode, setMouseMode] = useState("head"); // "head" | "clip"
   const [activeKeyIds, setActiveKeyIds] = useState([]);
@@ -123,8 +122,7 @@ export function useTrackModel({ BASE_STRIP_SECONDS }) {
       prev.map((track) => {
         if (track.id !== trackId) return track;
         const stripSeconds = getStripSeconds(track);
-        const newStartTime =
-          stripSeconds > 0 ? newStartFrac * stripSeconds : 0;
+        const newStartTime = stripSeconds > 0 ? newStartFrac * stripSeconds : 0;
 
         if (!track.clips || track.clips.length === 0) {
           return track;

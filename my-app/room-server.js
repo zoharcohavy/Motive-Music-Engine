@@ -25,6 +25,8 @@ const broadcastOccupancy = (roomName) => {
     ),
   });
 
+  console.log("[rooms] broadcasting occupancy:", payload);
+
   for (const client of clients) {
     if (client.readyState === client.OPEN) {
       client.send(payload);
@@ -51,6 +53,7 @@ server.on("upgrade", (req, socket, head) => {
       wss.emit("connection", ws, roomName);
     });
   } catch (e) {
+    console.error("Upgrade error:", e);
     socket.destroy();
   }
 });
@@ -66,29 +69,40 @@ wss.on("connection", (ws, roomName) => {
 
   console.log(`Client joined room "${roomName}", size=${clients.size}`);
 
- ws.on("message", (data) => {
-  let msg;
-  try {
-    msg = JSON.parse(data.toString());
-  } catch {
-    msg = null;
-  }
+  // 🔔 NEW: broadcast occupancy as soon as someone joins
+  broadcastOccupancy(roomName);
 
-  // Example: handle "join" here if you’re doing usernames
-  if (msg && msg.type === "join" && typeof msg.username === "string") {
-    ws.username = msg.username.trim() || "Anonymous";
-    // (optionally broadcast occupancy here)
-    return; // don’t forward "join" as a note
-  }
-
-  // 🔊 IMPORTANT: forward "note" and any other musical messages
-  for (const client of clients) {
-    if (client !== ws && client.readyState === client.OPEN) {
-      client.send(data);
+  ws.on("message", (data) => {
+    let msg;
+    try {
+      msg = JSON.parse(data.toString());
+    } catch {
+      msg = null;
     }
-  }
-});
 
+    if (!msg || typeof msg !== "object") {
+      return;
+    }
+
+    // Handle "join" to set username
+    if (msg.type === "join" && typeof msg.username === "string") {
+      ws.username = msg.username.trim() || "Anonymous";
+      console.log(
+        `[rooms] ${roomName}: client set username to "${ws.username}"`
+      );
+
+      // 🔔 NEW: when username changes, rebroadcast occupancy
+      broadcastOccupancy(roomName);
+      return; // don’t forward "join" as a note/message
+    }
+
+    // 🔊 Forward note / other music messages to all *other* clients in this room
+    for (const client of clients) {
+      if (client !== ws && client.readyState === client.OPEN) {
+        client.send(data);
+      }
+    }
+  });
 
   ws.on("close", () => {
     clients.delete(ws);
