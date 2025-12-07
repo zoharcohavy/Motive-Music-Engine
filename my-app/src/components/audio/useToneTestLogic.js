@@ -4,7 +4,7 @@ import {
   KEYS,
   getKeyIndexForKeyboardChar,
 } from "./constants";
-import { drawGenericWave } from "./drawUtils";
+//import { drawGenericWave } from "./drawUtils";
 import { useRoom } from "./useRoom";
 import { useTrackModel } from "./useTrackModel";
 
@@ -24,7 +24,7 @@ const draggingClipRef = useRef(null); // { trackId, clipId, offsetTime }
 const activeRecordingTrackIdRef = useRef(null);
 const isTransportPlayingRef = useRef(false);
 const transportAnimationFrameRef = useRef(null);
-const transportTrackIdRef = useRef(null);
+//const transportTrackIdRef = useRef(null);
 const transportStartWallTimeRef = useRef(null);
 const transportStartHeadTimeRef = useRef(0);
 const currentClipIdRef = useRef(null);
@@ -45,7 +45,7 @@ const [effect, setEffect] = useState("none");
 const [recordings, setRecordings] = useState([]);
 const [recordingsError, setRecordingsError] = useState(null);
 const [isRoomRecording, setIsRoomRecording] = useState(false);
-const [roomOccupantCount, setRoomOccupantCount] = useState(0); // others in the room
+//const [roomOccupantCount, setRoomOccupantCount] = useState(0); // others in the room
 
 const BASE_STRIP_SECONDS = 10;
 
