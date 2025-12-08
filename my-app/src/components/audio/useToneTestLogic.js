@@ -4,9 +4,10 @@ import {
   KEYS,
   getKeyIndexForKeyboardChar,
 } from "./constants";
-//import { drawGenericWave } from "./drawUtils";
 import { useRoom } from "./useRoom";
 import { useTrackModel } from "./useTrackModel";
+import { useAudioEngine } from "./useAudioEngine";
+
 
 export function useToneTestLogic() {
 // ---------- REFS ----------
@@ -30,24 +31,36 @@ const transportStartHeadTimeRef = useRef(0);
 const currentClipIdRef = useRef(null);
 const transportActiveClipsRef = useRef(new Map());
 // audio-related refs (needed by setupAudioContext / getAudioContext)
-const audioCtxRef = useRef(null);
-const analyserRef = useRef(null);
-const masterGainRef = useRef(null);
-const convolverRef = useRef(null);
-const recordDestRef = useRef(null);
-const mediaRecorderRef = useRef(null);
-const recordingChunksRef = useRef([]);
+
+const BASE_STRIP_SECONDS = 10;
+const audioEngine = useAudioEngine({ BASE_STRIP_SECONDS });
+
+const {
+  audioCtxRef,
+  analyserRef,
+  masterGainRef,
+  convolverRef,
+  recordDestRef,
+  mediaRecorderRef,
+  recordingChunksRef,
+  waveform,
+  setWaveform,
+  effect,
+  setEffect,
+  playNote,
+  playRemoteNote,
+  setEffectFromRoom,
+} = audioEngine;
+
 
 // key: `${trackId}:${clipId}` -> HTMLAudioElement
 // ---------- STATE ----------
-const [waveform, setWaveform] = useState("sine");
-const [effect, setEffect] = useState("none");
+
 const [recordings, setRecordings] = useState([]);
 const [recordingsError, setRecordingsError] = useState(null);
 const [isRoomRecording, setIsRoomRecording] = useState(false);
 //const [roomOccupantCount, setRoomOccupantCount] = useState(0); // others in the room
 
-const BASE_STRIP_SECONDS = 10;
 
 const trackApi = useTrackModel({ BASE_STRIP_SECONDS });
 
@@ -68,20 +81,15 @@ const {
   setActiveKeyIds,
   tracksRef,
   trackCanvasRefs,
-  // getStripSeconds,
-  // addTrack,
-  // changeZoom,
-  // moveTrackRecording,
-  // handleTrackStripMouseDown,
-  // handleTrackStripMouseMove,
+  getStripSeconds,
+  addTrack,
+  changeZoom,
+  moveTrackRecording,
+  handleTrackStripMouseDown,
+  handleTrackStripMouseMove,
   stopDragging,
 } = trackApi;
 
-
-const getStripSeconds = (track) => {
-  const zoom = track.zoom || 1;
-  return BASE_STRIP_SECONDS / zoom;
-};
 
 const clipsOverlap = (a, b) => {
   const aStart = a.startTime;
@@ -402,23 +410,6 @@ if (targetTrackId != null) {
     return audioCtxRef.current;
   };
 
-  const getConvolver = (ctx) => {
-    if (!convolverRef.current) {
-      const convolver = ctx.createConvolver();
-      const length = ctx.sampleRate * 2.0;
-      const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
-      for (let channel = 0; channel < 2; channel++) {
-        const data = impulse.getChannelData(channel);
-        for (let i = 0; i < length; i++) {
-          data[i] = (Math.random() * 2 - 1) * (1 - i / length);
-        }
-      }
-      convolver.buffer = impulse;
-      convolverRef.current = convolver;
-    }
-    return convolverRef.current;
-  };
-
   // ---------- KEY VISUAL HELPERS ----------
   const pressKeyVisual = (keyId) => {
     setActiveKeyIds((prev) =>
@@ -428,54 +419,6 @@ if (targetTrackId != null) {
 
   const releaseKeyVisual = (keyId) => {
     setActiveKeyIds((prev) => prev.filter((id) => id !== keyId));
-  };
-
-  // ---------- NOTE PLAYBACK ----------
-    const playNote = (
-    freq,
-    {
-      source = "local",
-      waveformOverride,
-      effectOverride,
-    } = {}
-  ) => {
-    const ctx = getAudioContext();
-    const masterGain = masterGainRef.current;
-    if (!ctx || !masterGain) return;
-
-    const oscWaveform = waveformOverride || waveform;
-    const fx = effectOverride || effect;
-
-    const oscillator = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-
-    oscillator.type = oscWaveform;
-    oscillator.frequency.value = freq;
-    gainNode.gain.value = 0.13;
-
-    if (fx === "reverb") {
-      const convolver = getConvolver(ctx);
-      oscillator.connect(gainNode);
-      gainNode.connect(convolver);
-      convolver.connect(masterGain);
-    } else {
-      oscillator.connect(gainNode);
-      gainNode.connect(masterGain);
-    }
-
-    oscillator.start();
-    oscillator.stop(ctx.currentTime + 1.5);
-
-    // Broadcast to room if this came from local player
-    if (source === "local" && roomStatus === "connected") {
-      console.log("[room] sending note", freq);
-      sendRoomMessage({
-        type: "note",
-        freq,
-        waveform: oscWaveform,
-        effect: fx,
-      });
-    }
   };
 
 
@@ -543,204 +486,6 @@ if (targetTrackId != null) {
     };
   }, []);
 
-// ---------- TAPE-HEAD / SCRUB ----------
-// Global tape head: clicking/dragging on any track moves ONE shared head
-const updateTrackTapeHeadFromEvent = (trackId, evt) => {
-  const rect = evt.currentTarget.getBoundingClientRect();
-  let pos = (evt.clientX - rect.left) / rect.width; // 0..1 across full strip
-  pos = Math.max(0, Math.min(1, pos));
-
-  setTracks((prev) =>
-    prev.map((track) => {
-      // If there's a recording on this track, convert strip position → fraction of that recording
-      if (track.hasRecording && track.recordingDuration) {
-        const zoom = track.zoom || 1;
-        const baseDuration = BASE_STRIP_SECONDS; // must match draw loop and TrackSection
-        const maxDuration = baseDuration / zoom;
-
-        // pos is 0..1 across maxDuration seconds on strip
-        // tapeHeadPos should be 0..1 across track.recordingDuration seconds
-        const tapeFrac = Math.min(
-          1,
-          (pos * maxDuration) / track.recordingDuration
-        );
-
-        return {
-          ...track,
-          tapeHeadPos: tapeFrac,
-          headPos: pos, // strip-relative 0..1, shared by ALL tracks logically
-        };
-      }
-
-      // No recording on this track: just store raw strip fraction
-      return {
-        ...track,
-        tapeHeadPos: pos,
-        headPos: pos,
-      };
-    })
-  );
-};
-
-
-
-
-  const handleTrackStripMouseDown = (trackId, e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    let frac = (e.clientX - rect.left) / rect.width; // 0..1 across the strip
-    frac = Math.max(0, Math.min(1, frac));
-
-    const tracksNow = tracksRef.current || [];
-    const track = tracksNow.find((t) => t.id === trackId);
-
-    if (track) {
-      const stripSeconds = getStripSeconds(track);
-      const clickTime = stripSeconds > 0 ? frac * stripSeconds : 0;
-      const clips = track.clips || [];
-
-      // Find the clip that contains this time
-      const clickedClip = clips.find((c) => {
-        const start = c.startTime;
-        const end = c.startTime + c.duration;
-        return clickTime >= start && clickTime <= end;
-      });
-
-      if (clickedClip) {
-        // Start dragging this clip; remember how far into the clip we clicked.
-        const offsetTime = clickTime - clickedClip.startTime;
-
-        draggingClipRef.current = {
-          trackId,
-          clipId: clickedClip.id,
-          offsetTime, // seconds into the clip where the mouse is
-        };
-
-        setSelectedTrackId(trackId);
-        return; // don't move the tape head in this case
-      }
-    }
-
-    // If we didn't click on a clip, fall back to dragging the tape head
-    draggingHeadTrackIdRef.current = trackId;
-    updateTrackTapeHeadFromEvent(trackId, e);
-  };
-
-  const handleTrackStripMouseMove = (trackId, e) => {
-    // If a clip is being dragged, move that clip instead of the head
-    if (draggingClipRef.current) {
-      const { trackId: fromTrackId, clipId, offsetTime } =
-        draggingClipRef.current;
-
-      const rect = e.currentTarget.getBoundingClientRect();
-      let frac = (e.clientX - rect.left) / rect.width; // 0..1 across this strip
-      frac = Math.max(0, Math.min(1, frac));
-
-      // Update tracks in a single, consistent pass
-      setTracks((prev) => {
-        const fromTrack = prev.find((t) => t.id === fromTrackId);
-        const targetTrack = prev.find((t) => t.id === trackId);
-        if (!fromTrack || !targetTrack) return prev;
-
-        const originalClip = (fromTrack.clips || []).find(
-          (c) => c.id === clipId
-        );
-        if (!originalClip) return prev;
-
-        const stripSeconds = getStripSeconds(targetTrack);
-        const hoverTime = stripSeconds > 0 ? frac * stripSeconds : 0;
-        const duration = originalClip.duration || 0;
-
-        // Where would the clip start so that the mouse stays at the same point inside it?
-        let newStartTime = hoverTime - (offsetTime || 0);
-        if (newStartTime < 0) newStartTime = 0;
-
-        // Don't let it run off the right edge
-        const maxStart =
-          stripSeconds > 0 ? Math.max(0, stripSeconds - duration) : 0;
-        if (newStartTime > maxStart) newStartTime = maxStart;
-
-        const candidateClip = {
-          ...originalClip,
-          startTime: newStartTime,
-          startFrac: stripSeconds > 0 ? newStartTime / stripSeconds : 0,
-        };
-
-        // Build the correct "other clips" list on the target track
-        const otherTargetClips = (targetTrack.clips || []).filter(
-          (c) => c.id !== clipId
-        );
-        if (willOverlap(otherTargetClips, candidateClip)) {
-          // Don't move into an overlapping spot
-          return prev;
-        }
-
-        // Return new tracks array with the clip living on exactly ONE track
-        return prev.map((t) => {
-          // Case 1: dragging within the SAME track
-          if (t.id === fromTrackId && t.id === trackId) {
-            const withoutThis = (t.clips || []).filter(
-              (c) => c.id !== clipId
-            );
-            const cleared =
-          withoutThis.length === 0
-            ? {
-                hasRecording: false,
-                recordingUrl: null,
-                recordingDuration: 0,
-                recordingImage: null,
-                clipStartPos: 0,
-              }
-            : {};
-            return {
-              ...t,
-              clips: [...withoutThis, candidateClip],
-              ...cleared,
-            };
-          }
-
-          // Case 2: remove from the old track if we're moving to a different one
-          if (t.id === fromTrackId && fromTrackId !== trackId) {
-            const withoutThis = (t.clips || []).filter(
-              (c) => c.id !== clipId
-            );
-            return {
-              ...t,
-              clips: withoutThis,
-            };
-          }
-
-          // Case 3: add/update on the new target track
-          if (t.id === trackId) {
-            const withoutThis = (t.clips || []).filter(
-              (c) => c.id !== clipId
-            );
-            return {
-              ...t,
-              clips: [...withoutThis, candidateClip],
-            };
-          }
-
-          // All other tracks unchanged
-          return t;
-        });
-      });
-
-      // Update drag ref so if we cross tracks, fromTrackId follows
-      draggingClipRef.current = {
-        trackId,
-        clipId,
-        offsetTime,
-      };
-
-      return;
-    }
-
-    // No clip being dragged: fallback to moving the tape head
-    if (draggingHeadTrackIdRef.current === trackId) {
-      updateTrackTapeHeadFromEvent(trackId, e);
-    }
-  };
-
 
   const playTrackFromHead = (track) => {
     if (!track || !track.recordingUrl) return;
@@ -793,107 +538,6 @@ const updateTrackTapeHeadFromEvent = (trackId, evt) => {
     audio.play().catch(() => {});
   };
 
-
-  // Helper: play a specific clip from the current tape-head position on the strip
-  const playClipFromHead = (track, clip) => {
-  if (!clip || !clip.url) return;
-
-  const audio = new Audio(clip.url);
-  currentAudioRef.current = audio;
-
-  const trackId = track.id;
-
-  // Where is the head right now (0..1), and what's that in seconds?
-  const stripSecondsInitial = getStripSeconds(track);
-  const headPosInitial =
-    track.headPos != null ? track.headPos : track.tapeHeadPos || 0;
-  const headTimeInitial = headPosInitial * stripSecondsInitial;
-
-  // How far into the clip should we start, based on the head position?
-  const offsetInClip = Math.max(0, headTimeInitial - clip.startTime);
-  const offsetFrac =
-    clip.duration > 0 ? offsetInClip / clip.duration : 0;
-
-  // Keep the tape head in sync with audio time
-  const attachTimeUpdate = () => {
-    audio.addEventListener("timeupdate", () => {
-      const tracksNow = tracksRef.current || [];
-      const t = tracksNow.find((tr) => tr.id === trackId);
-      if (!t) return;
-
-      const stripSeconds = getStripSeconds(t);
-
-      // audio.currentTime is time inside the clip
-      const clipTime = audio.currentTime;
-      const headTime = clip.startTime + clipTime;
-      const headPos =
-        stripSeconds > 0
-          ? Math.min(1, headTime / stripSeconds)
-          : 0;
-
-      setTracks((prev) =>
-        prev.map((tr) =>
-          tr.id === trackId ? { ...tr, headPos } : tr
-        )
-      );
-    });
-
-    audio.addEventListener("ended", () => {
-      // Clear the current audio reference when done
-      if (currentAudioRef.current === audio) {
-        currentAudioRef.current = null;
-      }
-    });
-  };
-
-  audio.addEventListener("loadedmetadata", () => {
-    try {
-      audio.currentTime = offsetFrac * audio.duration;
-    } catch (e) {}
-    attachTimeUpdate();
-    audio.play().catch(() => {});
-  });
-
-  // In case metadata is already loaded
-  attachTimeUpdate();
-  audio.play().catch(() => {});
-};
-const startClipAudioAtHeadTime = (clip, headTime) => {
-  if (!clip || !clip.url) return;
-
-  // Stop any existing audio
-  if (currentAudioRef.current) {
-    try {
-      currentAudioRef.current.pause();
-    } catch (e) {}
-    currentAudioRef.current = null;
-  }
-
-  const audio = new Audio(clip.url);
-  currentAudioRef.current = audio;
-
-  // headTime is position on strip (seconds)
-  // clip.startTime / clip.duration are also strip seconds
-  const offsetInClip = Math.max(0, headTime - clip.startTime); // seconds on strip
-  const offsetFrac =
-    clip.duration > 0 ? offsetInClip / clip.duration : 0;
-
-  const playAtOffset = () => {
-    try {
-      audio.currentTime = offsetFrac * audio.duration;
-    } catch (e) {}
-    audio.play().catch(() => {});
-  };
-
-  if (audio.readyState >= 1) {
-    // metadata already loaded
-    playAtOffset();
-  } else {
-    audio.addEventListener("loadedmetadata", () => {
-      playAtOffset();
-    });
-  }
-};
 const stopAllTransportAudio = () => {
   const map = transportActiveClipsRef.current;
   if (!map) return;
@@ -1068,25 +712,6 @@ const toggleTransportPlay = () => {
     requestAnimationFrame(step);
 };
 
-
-  const togglePlayFromHead = () => {
-    const current = currentAudioRef.current;
-
-    // If something is already playing, pause it
-    if (current && !current.paused && !current.ended) {
-      current.pause();
-      return;
-    }
-
-    // Otherwise start playback from the head on the selected track
-    const t = tracksRef.current.find(
-      (tr) => tr.id === selectedTrackId && tr.hasRecording && tr.recordingUrl
-    );
-    if (!t) return;
-
-    playTrackFromHead(t);
-  };
-
  // Play button in the UI: same behavior as the Space bar
 const handleGlobalPlay = () => {
   toggleTransportPlay();
@@ -1166,74 +791,6 @@ const handleGlobalPlay = () => {
   };
 
 
-  // ---------- TRACK ZOOM + ADD ----------
-  const addTrack = () => {
-    setTracks((prev) => [
-      ...prev,
-      {
-        id: nextTrackId,
-        zoom: globalZoom,
-        headPos: 0,
-        clips: [],
-        hasRecording: false,
-        recordingUrl: null,
-        recordingDuration: 0,
-        tapeHeadPos: 0,
-        recordingImage: null,
-        clipStartPos: 0,
-      },
-    ]);
-    setNextTrackId((id) => id + 1);
-  };
-
-  const changeZoom = (delta) => {
-    setGlobalZoom((prev) => {
-      const newZoom = Math.max(0.25, Math.min(4, prev + delta));
-      setTracks((tracksPrev) =>
-        tracksPrev.map((track) => ({
-          ...track,
-          zoom: newZoom,
-        }))
-      );
-      return newZoom;
-    });
-  };
-
-  // ---------- MOVE RECORDINGS BETWEEN TRACKS ----------
-  const moveTrackRecording = (fromTrackId, toTrackId) => {
-    setTracks((prev) => {
-      const fromTrack = prev.find((t) => t.id === fromTrackId);
-      const toTrack = prev.find((t) => t.id === toTrackId);
-      if (!fromTrack || !toTrack) return prev;
-
-      const fromClips = fromTrack.clips || [];
-      if (fromClips.length === 0) return prev;
-
-      // For now, move the last clip from one track to the other
-      const clipToMove = fromClips[fromClips.length - 1];
-
-      // Prevent overlapping on the target track
-      const targetClips = toTrack.clips || [];
-      if (willOverlap(targetClips, clipToMove)) {
-        return prev;
-      }
-
-      const newFromClips = fromClips.slice(0, -1);
-      const newToClips = [...targetClips, clipToMove];
-
-      return prev.map((t) => {
-        if (t.id === fromTrackId) {
-          return { ...t, clips: newFromClips };
-        }
-        if (t.id === toTrackId) {
-          return { ...t, clips: newToClips };
-        }
-        return t;
-      });
-    });
-  };
-
-
   // ---------- KEYBOARD SHORTCUTS ----------
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -1307,7 +864,6 @@ const handleGlobalPlay = () => {
 
     handleTrackStripMouseDown,
     handleTrackStripMouseMove,
-    moveTrackRecording,
     trackCanvasRefs,
 
     activeKeyIds,

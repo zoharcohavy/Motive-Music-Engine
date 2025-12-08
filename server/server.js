@@ -3,11 +3,80 @@
 import express from "express";
 import http from "http";
 import { WebSocketServer } from "ws";
+import cors from "cors";
+import multer from "multer";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
-// You can add normal routes if you want, e.g.
-// app.get("/health", (req, res) => res.send("ok"));
+// --- COMMON MIDDLEWARE ---
+app.use(cors());
+app.use(express.json());
+
+// ---------- RECORDINGS API SETUP ----------
+
+// Folder where .wav files are stored
+const recordingsDir = path.join(__dirname, "recordings");
+
+// Make sure the folder exists
+if (!fs.existsSync(recordingsDir)) {
+  fs.mkdirSync(recordingsDir, { recursive: true });
+}
+
+// Serve the raw wav files at /recordings/<filename>
+app.use("/recordings", express.static(recordingsDir));
+
+// List recordings: GET /api/recordings
+app.get("/api/recordings", (req, res) => {
+  fs.readdir(recordingsDir, (err, files) => {
+    if (err) {
+      console.error("Error reading recordings directory:", err);
+      return res
+        .status(500)
+        .json({ error: "Failed to read recordings directory" });
+    }
+
+    // only return wav files (just in case something else is in that folder)
+    const wavFiles = files.filter((f) => f.toLowerCase().endsWith(".wav"));
+    res.json({ recordings: wavFiles });
+  });
+});
+
+// Upload recording: POST /api/recordings/upload  (field name "audio")
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, recordingsDir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || ".wav";
+    const timestamp = Date.now();
+    cb(null, `recording_${timestamp}${ext}`);
+  },
+});
+
+const upload = multer({ storage });
+
+app.post("/api/recordings/upload", upload.single("audio"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: "No audio file uploaded" });
+  }
+  res.json({
+    success: true,
+    filename: req.file.filename,
+  });
+});
+
+// Optional health check
+app.get("/health", (req, res) => {
+  res.send("ok");
+});
+
+// ---------- WEBSOCKET ROOMS SETUP ----------
 
 // Create a raw HTTP server that wraps Express:
 const server = http.createServer(app);
