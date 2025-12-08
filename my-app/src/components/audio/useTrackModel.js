@@ -1,6 +1,7 @@
 // useTrackModel.js
 import { useRef, useState, useEffect } from "react";
 import { drawGenericWave } from "./drawUtils";
+import { useTransport } from "./useTransport";
 
 /**
  * Track model + drawing + mouse interaction (head + clip drag)
@@ -31,6 +32,7 @@ export function useTrackModel({ BASE_STRIP_SECONDS }) {
     },
   ]);
 
+  
   const [nextTrackId, setNextTrackId] = useState(1);
   const [globalZoom, setGlobalZoom] = useState(1);
   const [activeRecordingTrackId, setActiveRecordingTrackId] = useState(null);
@@ -47,6 +49,11 @@ export function useTrackModel({ BASE_STRIP_SECONDS }) {
   useEffect(() => {
     tracksRef.current = tracks;
   }, [tracks]);
+  const {
+    handleGlobalPlay,
+    toggleTransportPlay,
+    isTransportPlayingRef,
+  } = useTransport({ tracksRef, setTracks });
 
   // ---------- Helpers ----------
 
@@ -420,5 +427,9 @@ if (track.clips && track.clips.length > 0) {
     handleTrackStripMouseDown,
     handleTrackStripMouseMove,
     stopDragging,
+
+    handleGlobalPlay,
+    toggleTransportPlay,
+    isTransportPlayingRef,
   };
 }

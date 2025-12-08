@@ -30,7 +30,6 @@ export default function ToneTestPage() {
     activeRecordingTrackId,
     handleTrackStripMouseDown,
     handleTrackStripMouseMove,
-    moveTrackRecording,
     trackCanvasRefs,
     activeKeyIds,
     handleKeyMouseDown,
@@ -109,7 +108,6 @@ export default function ToneTestPage() {
         mouseMode={mouseMode}
         handleTrackStripMouseDown={handleTrackStripMouseDown}
         handleTrackStripMouseMove={handleTrackStripMouseMove}
-        moveTrackRecording={moveTrackRecording}
         trackCanvasRefs={trackCanvasRefs}
       />
 

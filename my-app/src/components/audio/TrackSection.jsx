@@ -27,7 +27,6 @@ export default function TrackSection({
   mouseMode,
   handleTrackStripMouseDown,
   handleTrackStripMouseMove,
-  moveTrackRecording, // kept so API stays compatible, even if this impl doesn't call it
   trackCanvasRefs,
 }) {
   const hasTracks = tracks && tracks.length > 0;
