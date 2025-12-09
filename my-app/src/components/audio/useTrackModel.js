@@ -14,7 +14,7 @@ import { useTransport } from "./useTransport";
  * - track canvases + drawing
  * - dragging tape-head and clips
  */
-export function useTrackModel({ BASE_STRIP_SECONDS }) {
+export function useTrackModel(options = {}) {
   // ---------- State ----------
   const [tracks, setTracks] = useState([
     {
@@ -32,7 +32,7 @@ export function useTrackModel({ BASE_STRIP_SECONDS }) {
     },
   ]);
 
-  
+  const BASE_STRIP_SECONDS = 10;
   const [nextTrackId, setNextTrackId] = useState(1);
   const [globalZoom, setGlobalZoom] = useState(1);
   const [activeRecordingTrackId, setActiveRecordingTrackId] = useState(null);

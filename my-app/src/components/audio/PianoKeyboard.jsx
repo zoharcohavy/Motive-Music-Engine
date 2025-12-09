@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { KEYS } from "../../components/audio/constants";
 
 export default function PianoKeyboard({
@@ -6,6 +6,7 @@ export default function PianoKeyboard({
   onMouseDownKey,
   onMouseEnterKey,
 }) {
+  const [isMouseDown, setIsMouseDown] = useState(false);
   const whiteKeys = [];
   let whiteIndex = 0;
 
@@ -55,6 +56,8 @@ export default function PianoKeyboard({
         overflowX: "hidden",
         background: "#ddd",
       }}
+      onMouseUp={() => setIsMouseDown(false)}
+      onMouseLeave={() => setIsMouseDown(false)}
     >
       <div
         style={{
@@ -67,8 +70,16 @@ export default function PianoKeyboard({
         {whiteKeys.map((key) => (
           <button
             key={key.id}
-            onMouseDown={() => onMouseDownKey(key)}
-            onMouseEnter={() => onMouseEnterKey(key)}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsMouseDown(true);
+              onMouseDownKey(key);
+            }}
+            onMouseEnter={() => {
+              if (isMouseDown) {
+                onMouseEnterKey(key);
+              }
+            }}
             style={{
               position: "absolute",
               left: `calc((100vw / ${totalWhites}) * ${key.whiteIndex})`,
@@ -102,8 +113,16 @@ export default function PianoKeyboard({
         {blackKeysPositioned.map((key) => (
           <button
             key={`black-${key.id}`}
-            onMouseDown={() => onMouseDownKey(key)}
-            onMouseEnter={() => onMouseEnterKey(key)}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              setIsMouseDown(true);
+              onMouseDownKey(key);
+            }}
+            onMouseEnter={() => {
+              if (isMouseDown) {
+                onMouseEnterKey(key);
+              }
+            }}
             style={{
               position: "absolute",
               left: `calc((100vw / ${key.totalWhite}) * ${key.offset})`,

@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useToneTestLogic } from "../components/audio/useToneTestLogic";
+import { KEYS, getKeyIndexForKeyboardChar } from "../components/audio/constants";
 import RecordingsPanel from "../components/audio/RecordingsPanel";
 import TopControls from "../components/audio/TopControls";
 import MouseModeToggle from "../components/audio/MouseModeToggle";
@@ -45,6 +46,55 @@ export default function ToneTestPage() {
     isRoomRecording,
     roomUsernames,
   } = useToneTestLogic();
+  // Global keyboard shortcuts:
+  // - Space: toggle playback from current tape-head position
+  // - Enter: start/stop recording on the currently selected track
+  // - Letter keys: play piano notes via getKeyIndexForKeyboardChar
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Avoid hijacking typing in inputs/textareas/content-editable
+      const tag = e.target.tagName;
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        e.target.isContentEditable
+      ) {
+        return;
+      }
+
+      // Prevent browser from scrolling on Space
+      if (e.code === "Space") {
+        e.preventDefault();
+        handleGlobalPlay();
+        return;
+      }
+
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (selectedTrackId != null) {
+          handleTrackRecordToggle(selectedTrackId);
+        }
+        return;
+      }
+
+      // Map regular character keys to piano keys
+      if (e.key && e.key.length === 1) {
+        const char = e.key.toLowerCase();
+        const keyIndex = getKeyIndexForKeyboardChar(char);
+        if (keyIndex >= 0 && keyIndex < KEYS.length) {
+          const pianoKey = KEYS[keyIndex];
+          if (pianoKey) {
+            handleKeyMouseDown(pianoKey);
+          }
+        }
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [handleGlobalPlay, handleTrackRecordToggle, selectedTrackId, handleKeyMouseDown]);
 
 
     return (
