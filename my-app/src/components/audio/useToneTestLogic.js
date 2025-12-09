@@ -1,883 +1,171 @@
-import { useRef, useState, useEffect } from "react";
-import {
-  API_BASE,
-  KEYS,
-  getKeyIndexForKeyboardChar,
-} from "./constants";
+import { useRef } from "react";
+import { useAudioEngine } from "./useAudioEngine";
 import { useRoom } from "./useRoom";
 import { useTrackModel } from "./useTrackModel";
-import { useAudioEngine } from "./useAudioEngine";
+import { useRecording } from "./useRecording";
 
 
+
+/**
+ * Main orchestration hook for the ToneTest page.
+ *
+ * It wires together:
+ * - Audio engine (local piano + waveform)
+ * - Track model (tracks, tape head, zoom, dragging)
+ * - Transport (through useTrackModel)
+ * - Room (WebSocket rooms)
+ * - Recording (MediaRecorder + track / room recordings)
+ */
 export function useToneTestLogic() {
-// ---------- REFS ----------
-const isMouseDownRef = useRef(false);
-const animationFrameRef = useRef(null);
-const waveCanvasRef = useRef(null);
-const zoomRef = useRef(1);
-const recordingTargetTrackIdRef = useRef(null);
-const recordStartTimeRef = useRef(null);
-const recordDurationRef = useRef(0);
-const recordInitialHeadPosRef = useRef(0);
-const currentAudioRef = useRef(null);
-const draggingHeadTrackIdRef = useRef(null);
-const draggingClipRef = useRef(null); // { trackId, clipId, offsetTime }
-const activeRecordingTrackIdRef = useRef(null);
-const isTransportPlayingRef = useRef(false);
-const transportAnimationFrameRef = useRef(null);
-//const transportTrackIdRef = useRef(null);
-const transportStartWallTimeRef = useRef(null);
-const transportStartHeadTimeRef = useRef(0);
-const currentClipIdRef = useRef(null);
-const transportActiveClipsRef = useRef(new Map());
-// audio-related refs (needed by setupAudioContext / getAudioContext)
+  // We need a ref so the room callback can call audioEngine.playRemoteNote
+  const audioEngineRef = useRef(null);
 
-const BASE_STRIP_SECONDS = 10;
-const audioEngine = useAudioEngine({ BASE_STRIP_SECONDS });
+  // --- Room / WebSocket ---
+  // Room notifies us when a remote user plays a note.
+  const room = useRoom({
+    onRemoteNote: ({ freq, waveform, effect }) => {
+      const engine = audioEngineRef.current;
+      if (!engine) return;
 
-const {
-  audioCtxRef,
-  analyserRef,
-  masterGainRef,
-  convolverRef,
-  recordDestRef,
-  mediaRecorderRef,
-  recordingChunksRef,
-  waveform,
-  setWaveform,
-  effect,
-  setEffect,
-  playNote,
-  playRemoteNote,
-  setEffectFromRoom,
-} = audioEngine;
-
-
-// key: `${trackId}:${clipId}` -> HTMLAudioElement
-// ---------- STATE ----------
-
-const [recordings, setRecordings] = useState([]);
-const [recordingsError, setRecordingsError] = useState(null);
-const [isRoomRecording, setIsRoomRecording] = useState(false);
-//const [roomOccupantCount, setRoomOccupantCount] = useState(0); // others in the room
-
-
-const trackApi = useTrackModel({ BASE_STRIP_SECONDS });
-
-const {
-  tracks,
-  setTracks,
-  nextTrackId,
-  setNextTrackId,
-  globalZoom,
-  setGlobalZoom,
-  activeRecordingTrackId,
-  setActiveRecordingTrackId,
-  selectedTrackId,
-  setSelectedTrackId,
-  mouseMode,
-  setMouseMode,
-  activeKeyIds,
-  setActiveKeyIds,
-  tracksRef,
-  trackCanvasRefs,
-  getStripSeconds,
-  addTrack,
-  changeZoom,
-  moveTrackRecording,
-  handleTrackStripMouseDown,
-  handleTrackStripMouseMove,
-  stopDragging,
-} = trackApi;
-
-
-const clipsOverlap = (a, b) => {
-  const aStart = a.startTime;
-  const aEnd = a.startTime + a.duration;
-  const bStart = b.startTime;
-  const bEnd = b.startTime + b.duration;
-  return Math.max(aStart, bStart) < Math.min(aEnd, bEnd);
-};
-
-const willOverlap = (clips, candidate, ignoreId = null) => {
-  return (clips || []).some((c) => {
-    if (ignoreId && c.id === ignoreId) return false;
-    return clipsOverlap(c, candidate);
-  });
-};
-
-// keep refs synced
-// ---------- LIVE WAVEFORM DRAWING ----------
-useEffect(() => {
-  const canvas = waveCanvasRef.current;
-  if (!canvas) return;
-
-  const ctx2d = canvas.getContext("2d");
-  if (!ctx2d) return;
-
-  // Make sure AudioContext and Analyser exist
-  const audioCtx = getAudioContext();
-  if (!audioCtx) return;
-  const analyser = analyserRef.current;
-  if (!analyser) return;
-
-  // Prepare buffer to read time-domain data
-  const bufferLength = analyser.fftSize;
-  const dataArray = new Uint8Array(bufferLength);
-
-  let frameId;
-
-  const draw = () => {
-    if (!waveCanvasRef.current) return;
-
-    const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-
-    const width = rect.width || canvas.width || 0;
-    const height = rect.height || canvas.height || 0;
-    if (width <= 0 || height <= 0) {
-      frameId = requestAnimationFrame(draw);
-      return;
-    }
-
-    // Resize backing store if needed
-    if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
-    }
-
-    ctx2d.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-    // Get the current waveform
-    analyser.getByteTimeDomainData(dataArray);
-
-    // Clear background
-    ctx2d.clearRect(0, 0, width, height);
-    ctx2d.fillStyle = "#111";
-    ctx2d.fillRect(0, 0, width, height);
-
-    // Draw the waveform
-    ctx2d.lineWidth = 2;
-    ctx2d.strokeStyle = "#4af"; // cyan-ish line
-    ctx2d.beginPath();
-
-    const sliceWidth = width / bufferLength;
-    let x = 0;
-
-    for (let i = 0; i < bufferLength; i++) {
-      const v = dataArray[i] / 128.0;   // 0..2
-      const y = (v * 0.5) * height;     // center around middle-ish
-
-      if (i === 0) {
-        ctx2d.moveTo(x, y);
-      } else {
-        ctx2d.lineTo(x, y);
-      }
-
-      x += sliceWidth;
-    }
-
-    ctx2d.stroke();
-
-    frameId = requestAnimationFrame(draw);
-    animationFrameRef.current = frameId;
-  };
-
-  draw();
-
-  return () => {
-    if (frameId) {
-      cancelAnimationFrame(frameId);
-    }
-  };
-}, [waveform, effect]);
-
-useEffect(() => {
-  zoomRef.current = globalZoom;
-}, [globalZoom]);
-
-useEffect(() => {
-  activeRecordingTrackIdRef.current = activeRecordingTrackId;
-}, [activeRecordingTrackId]);
-
-// ---------- TRACK DRAWING ----------
-// Draw tracks (clips and tape heads) into canvases whenever tracks or zoom change
-// ---------- TAPE-HEAD ANIMATION (RECORDING) ----------
-useEffect(() => {
-  let frameId = null;
-
-  const step = () => {
-  const recorder = mediaRecorderRef.current;
-  const isRecording = recorder && recorder.state === "recording";
-  const targetTrackId = recordingTargetTrackIdRef.current;
-
-  if (isRecording && (targetTrackId != null) && (recordStartTimeRef.current != null)) {
-    // How long we've been recording
-    const now = performance.now();
-    const elapsedSec = (now - recordStartTimeRef.current) / 1000;
-
-    // Keep this in sync with what onstop uses
-    recordDurationRef.current = elapsedSec;
-
-    const tracksNow = tracksRef.current || [];
-    const track = tracksNow.find((t) => t.id === targetTrackId);
-
-    if (track) {
-      const stripSeconds = getStripSeconds(track);
-      const startFrac = recordInitialHeadPosRef.current || 0;
-
-      // Move the head to the right at real-time speed
-      let headPos = startFrac;
-      if (stripSeconds > 0) {
-        headPos = startFrac + elapsedSec / stripSeconds;
-      }
-
-      // Clamp to the right edge
-      if (headPos >= 1) {
-        headPos = 1;
-        // Stop recording if we hit the end of the strip
-        if (recorder.state === "recording") {
-          recorder.stop();
-        }
-      }
-
-      // Check if we've run into an existing clip on this track
-      const stripTime = headPos * stripSeconds;
-      const existingClips = track.clips || [];
-      const collided = existingClips.find((c) => {
-      const start = c.startTime;
-      const end = c.startTime + c.duration;
-      return stripTime >= start && stripTime <= end;
+      // Play the remote note through our local audio engine
+      engine.playRemoteNote(freq, {
+        waveform,
+        effect,
       });
 
-      if (collided && recorder.state === "recording") {
-        // Stop immediately when we reach a different clip
-        recorder.stop();
+      // Optionally sync local effect with the room’s effect
+      if (effect && typeof engine.setEffectFromRoom === "function") {
+        engine.setEffectFromRoom(effect);
       }
+    },
+  });
 
-      // Apply the new head position to React state
-      setTracks((prev) =>
-        prev.map((t) =>
-          t.id === targetTrackId ? { ...t, headPos } : t
-        )
-      );
-    }
-  }
+  // --- Audio engine ---
+  // Give the audio engine awareness of the room so it can broadcast notes.
+  const audioEngine = useAudioEngine({
+    roomStatus: room.roomStatus,
+    sendRoomMessage: room.sendRoomMessage,
+  });
 
-  frameId = window.requestAnimationFrame(step);
-  animationFrameRef.current = frameId;
-};
+  // Make the engine accessible to the room callback
+  audioEngineRef.current = audioEngine;
 
-frameId = window.requestAnimationFrame(step);
-animationFrameRef.current = frameId;
+  // --- Tracks + transport (global tape head) ---
+  // useTrackModel already owns useTransport internally and exposes:
+  // - tracks, setTracks
+  // - globalZoom, changeZoom
+  // - mouseMode, setMouseMode
+  // - handleGlobalPlay, handleTrackStripMouseDown, handleTrackStripMouseMove
+  const trackModel = useTrackModel();
 
-return () => {
-  if (frameId) {
-    window.cancelAnimationFrame(frameId);
-  }
-};
-}, [setTracks]);
-
-  // ---------- AUDIO SETUP ----------
-  const setupAudioContext = () => {
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    const ctx = new AudioContext();
-
-    const masterGain = ctx.createGain();
-    masterGain.gain.value = 0.9;
-    masterGain.connect(ctx.destination);
-
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 2048;
-    masterGain.connect(analyser);
-
-    const recordDest = ctx.createMediaStreamDestination();
-    masterGain.connect(recordDest);
-
-    const mediaRecorder = new MediaRecorder(recordDest.stream);
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) {
-        recordingChunksRef.current.push(e.data);
-      }
-    };
-    mediaRecorder.onstop = async () => {
-      const blob = new Blob(recordingChunksRef.current, { type: "audio/wav" });
-      recordingChunksRef.current = [];
-
-      const targetTrackId = recordingTargetTrackIdRef.current;
-      recordingTargetTrackIdRef.current = null;
-      setActiveRecordingTrackId(null);
-
-      const localUrl = URL.createObjectURL(blob);
-
-      if (recordStartTimeRef.current) {
-        recordDurationRef.current =
-          (performance.now() - recordStartTimeRef.current) / 1000;
-      }
-
-      let recordingImage = null;
-      if (targetTrackId != null && trackCanvasRefs.current[targetTrackId]) {
-        try {
-          recordingImage =
-            trackCanvasRefs.current[targetTrackId].toDataURL("image/png");
-        } catch (e) {
-          console.warn("Could not snapshot tape canvas", e);
-        }
-      }
-
-if (targetTrackId != null) {
-  const duration = recordDurationRef.current || 0;
-
-  setTracks((prev) =>
-    prev.map((track) => {
-      if (track.id !== targetTrackId) return track;
-
-      const stripSeconds = getStripSeconds(track);
-      const clipStartFrac = recordInitialHeadPosRef.current || 0; // 0..1
-      const clipStartTime = clipStartFrac * stripSeconds;
-
-      const newClip = {
-        id: crypto.randomUUID(),
-        url: localUrl,
-        duration,
-        startTime: clipStartTime,
-        startFrac: clipStartFrac,
-        image: recordingImage,
-      };
-
-      const existing = track.clips || [];
-
-      // Don't allow overlapping clips
-      if (willOverlap(existing, newClip)) {
-        // TODO: show "cannot record there" message if you want
-        return track;
-      }
-
-      const updatedClips = [...existing, newClip];
-
-      // Move head to the end of this new clip (0..1 across strip)
-      const stripEndTime = clipStartTime + duration;
-      const clampedEnd = Math.min(stripSeconds, stripEndTime);
-      const headPos =
-        stripSeconds > 0 ? clampedEnd / stripSeconds : 0;
-
-      return {
-        ...track,
-        clips: updatedClips,
-        headPos,
-
-        // keep legacy fields for anything still using them
-        hasRecording: true,
-        recordingUrl: localUrl,
-        recordingDuration: duration,
-        tapeHeadPos: headPos,
-        clipStartPos: clipStartFrac,
-        recordingImage,
-      };
-    })
-  );
-}
-
-
-      try {
-        const formData = new FormData();
-        formData.append("audio", blob, "recording.wav");
-
-        await fetch(`${API_BASE}/api/recordings/upload`, {
-          method: "POST",
-          body: formData,
-        });
-
-        fetchRecordings();
-      } catch (err) {
-        console.error("Upload failed:", err);
-      }
-    };
-
-    audioCtxRef.current = ctx;
-    analyserRef.current = analyser;
-    masterGainRef.current = masterGain;
-    recordDestRef.current = recordDest;
-    mediaRecorderRef.current = mediaRecorder;
-
-    return ctx;
-  };
-
-  const getAudioContext = () => {
-    if (!audioCtxRef.current) {
-      return setupAudioContext();
-    }
-    return audioCtxRef.current;
-  };
-
-  // ---------- KEY VISUAL HELPERS ----------
-  const pressKeyVisual = (keyId) => {
-    setActiveKeyIds((prev) =>
-      prev.includes(keyId) ? prev : [...prev, keyId]
-    );
-  };
-
-  const releaseKeyVisual = (keyId) => {
-    setActiveKeyIds((prev) => prev.filter((id) => id !== keyId));
-  };
-
-
+  // --- Recording (MediaRecorder) ---
+  // New hook signature:
+  //   useRecording({
+  //     audioEngine,
+  //     trackCanvasRefs,
+  //     tracksRef,
+  //     setTracks,
+  //     activeRecordingTrackId,
+  //     setActiveRecordingTrackId,
+  //   })
+  const recording = useRecording({
+    audioEngine,
+    trackCanvasRefs: trackModel.trackCanvasRefs,
+    tracksRef: trackModel.tracksRef,
+    setTracks: trackModel.setTracks,
+    activeRecordingTrackId: trackModel.activeRecordingTrackId,
+    setActiveRecordingTrackId: trackModel.setActiveRecordingTrackId,
+  });
+  
+  // --- Keyboard handlers for the PianoKeyboard component ---
   const handleKeyMouseDown = (key) => {
-    isMouseDownRef.current = true;
-    pressKeyVisual(key.id);
-    playNote(key.freq);
+    if (!key || typeof key.freq !== "number") return;
+
+    // Mark this key as active (for visual highlight)
+    trackModel.setActiveKeyIds((prev) =>
+      prev.includes(key.id) ? prev : [...prev, key.id]
+    );
+
+    // Play the note through the audio engine
+    audioEngine.playNote(key.freq, { source: "local" });
+
+    // Clear the active state after a short delay so the key visual resets
+    setTimeout(() => {
+      trackModel.setActiveKeyIds((prev) =>
+        prev.filter((id) => id !== key.id)
+      );
+    }, 200);
   };
 
   const handleKeyMouseEnter = (key) => {
-    if (isMouseDownRef.current) {
-      pressKeyVisual(key.id);
-      playNote(key.freq);
-    }
-  };
-  // --- Room -> audio bridge: how to play a remote note ---
-  const handleRemoteNote = ({ freq, waveform, effect }) => {
-    if (typeof freq !== "number") return;
-    playNote(freq, {
-      source: "remote",
-      waveformOverride: waveform,
-      effectOverride: effect,
-    });
-  };
-  // --- Room hook: all WebSocket + room state ---
-  const {
-    roomId,
-    roomStatus,
-    roomUsernames,
-    isRoomModalOpen,
-    openRoomModal,
-    closeRoomModal,
-    connectToRoom,
-    disconnectRoom,
-    sendRoomMessage,
-  } = useRoom({ onRemoteNote: handleRemoteNote });
+    if (!key || typeof key.freq !== "number") return;
 
-  // ---------- MOUSE UP / SCRUB PLAY ----------
-  const handleMouseUp = () => {
-    isMouseDownRef.current = false;
-    setActiveKeyIds([]);
-
-    // If we were dragging a clip, just end the drag and do nothing else
-    if (draggingClipRef.current) {
-      draggingClipRef.current = null;
-      return;
-    }
-
-    // Otherwise, if we were dragging the tape head, maybe scrub-play
-    const trackId = draggingHeadTrackIdRef.current;
-    if (trackId != null) {
-      draggingHeadTrackIdRef.current = null;
-      const t = tracksRef.current.find((tr) => tr.id === trackId);
-      if (t && t.hasRecording && t.recordingUrl) {
-        playTrackFromHead(t);
-      }
-    }
-  };
-
-
-  useEffect(() => {
-    window.addEventListener("mouseup", handleMouseUp);
-    return () => {
-      window.removeEventListener("mouseup", handleMouseUp);
-    };
-  }, []);
-
-
-  const playTrackFromHead = (track) => {
-    if (!track || !track.recordingUrl) return;
-
-    const audio = new Audio(track.recordingUrl);
-    currentAudioRef.current = audio;
-
-    const trackId = track.id;
-    const startFrac = track.tapeHeadPos || 0;
-
-    const attachTimeUpdate = () => {
-      const duration =
-        track.recordingDuration && track.recordingDuration > 0
-          ? track.recordingDuration
-          : audio.duration || 0;
-      if (!duration) return;
-
-      audio.addEventListener("timeupdate", () => {
-        const frac = audio.currentTime / duration;
-
-        setTracks((prev) =>
-          prev.map((t) =>
-            t.id === trackId
-              ? {
-                  ...t,
-                  tapeHeadPos: Math.min(1, Math.max(0, frac)),
-                }
-              : t
-          )
-        );
-      });
-
-      audio.addEventListener("ended", () => {
-        if (currentAudioRef.current === audio) {
-          currentAudioRef.current = null;
-        }
-      });
-    };
-
-    audio.addEventListener("loadedmetadata", () => {
-      try {
-        audio.currentTime = startFrac * audio.duration;
-      } catch (e) {}
-      attachTimeUpdate();
-      audio.play().catch(() => {});
-    });
-
-    // In case metadata is already loaded
-    attachTimeUpdate();
-    audio.play().catch(() => {});
-  };
-
-const stopAllTransportAudio = () => {
-  const map = transportActiveClipsRef.current;
-  if (!map) return;
-  for (const audio of map.values()) {
-    try {
-      audio.pause();
-    } catch (e) {}
-  }
-  transportActiveClipsRef.current = new Map();
-};
-  
-const toggleTransportPlay = () => {
-  // If already playing, stop transport + audio
-  if (isTransportPlayingRef.current) {
-    isTransportPlayingRef.current = false;
-    if (transportAnimationFrameRef.current) {
-      cancelAnimationFrame(transportAnimationFrameRef.current);
-      transportAnimationFrameRef.current = null;
-    }
-    stopAllTransportAudio();
-    currentClipIdRef.current = null; // no longer used for multi-clip, but safe to reset
-    return;
-  }
-
-  const tracksNow = tracksRef.current || [];
-  if (!tracksNow.length) return;
-
-  // Use a single "global strip length" based on zoom
-  const zoom = (tracksNow[0] && tracksNow[0].zoom) || 1;
-  const stripSeconds = BASE_STRIP_SECONDS / zoom;
-
-  // Use headPos from any track (since we now keep them in sync)
-  let headPos = 0;
-  const trackWithHead = tracksNow.find(
-    (t) => t.headPos != null || t.tapeHeadPos != null
-  );
-  if (trackWithHead) {
-    headPos =
-      trackWithHead.headPos != null
-        ? trackWithHead.headPos
-        : trackWithHead.tapeHeadPos || 0;
-  }
-  const headTime = stripSeconds > 0 ? headPos * stripSeconds : 0;
-
-  isTransportPlayingRef.current = true;
-  transportStartWallTimeRef.current = performance.now();
-  transportStartHeadTimeRef.current = headTime;
-  currentClipIdRef.current = null;
-  stopAllTransportAudio(); // clear any leftovers
-
-  const step = () => {
-    if (!isTransportPlayingRef.current) return;
-
-    const tracksNowInner = tracksRef.current || [];
-    if (!tracksNowInner.length) {
-      isTransportPlayingRef.current = false;
-      stopAllTransportAudio();
-      return;
-    }
-
-    const zoomNow =
-      (tracksNowInner[0] && tracksNowInner[0].zoom) || 1;
-    const stripSecondsNow = BASE_STRIP_SECONDS / zoomNow;
-
-    const now = performance.now();
-    const elapsed =
-      (now - transportStartWallTimeRef.current) / 1000;
-    const startTime = transportStartHeadTimeRef.current;
-
-    let newTime = startTime + elapsed;
-    let reachedEnd = false;
-
-    if (stripSecondsNow > 0 && newTime >= stripSecondsNow) {
-      newTime = stripSecondsNow;
-      reachedEnd = true;
-    }
-
-    const newHeadPos =
-      stripSecondsNow > 0 ? newTime / stripSecondsNow : 0;
-
-    // Move the tape head on *all* tracks so UI stays in sync
-    setTracks((prev) =>
-      prev.map((tr) => ({
-        ...tr,
-        headPos: newHeadPos,
-        tapeHeadPos: newHeadPos,
-      }))
+    // Optional: you can later restrict this so it only fires when mouse is down
+    trackModel.setActiveKeyIds((prev) =>
+      prev.includes(key.id) ? prev : [...prev, key.id]
     );
 
-    // Decide what should be playing at this time
-    const activeMap =
-      transportActiveClipsRef.current || new Map();
-    const shouldBeActive = new Set();
+    audioEngine.playNote(key.freq, { source: "local" });
 
-    tracksNowInner.forEach((tr) => {
-      const clips = tr.clips || [];
-      clips.forEach((clip) => {
-        if (!clip || !clip.url) return;
-
-        const start = clip.startTime;
-        const end = clip.startTime + clip.duration;
-        if (newTime >= start && newTime < end) {
-          const key = `${tr.id}:${clip.id}`;
-          shouldBeActive.add(key);
-
-          // If this clip is not already playing, start it
-          if (!activeMap.has(key)) {
-            const audio = new Audio(clip.url);
-
-            const offsetInClip = Math.max(
-              0,
-              newTime - clip.startTime
-            );
-            const offsetFrac =
-              clip.duration > 0
-                ? offsetInClip / clip.duration
-                : 0;
-
-            const startAudioAtOffset = () => {
-              try {
-                audio.currentTime =
-                  offsetFrac * audio.duration;
-              } catch (e) {}
-              audio.play().catch(() => {});
-            };
-
-            if (audio.readyState >= 1) {
-              // metadata loaded
-              startAudioAtOffset();
-            } else {
-              audio.addEventListener(
-                "loadedmetadata",
-                startAudioAtOffset
-              );
-            }
-
-            activeMap.set(key, audio);
-          }
-        }
-      });
-    });
-
-    // Stop any clips that should no longer be active
-    for (const [key, audio] of activeMap.entries()) {
-      if (!shouldBeActive.has(key)) {
-        try {
-          audio.pause();
-        } catch (e) {}
-        activeMap.delete(key);
-      }
-    }
-
-    transportActiveClipsRef.current = activeMap;
-
-    if (reachedEnd) {
-      isTransportPlayingRef.current = false;
-      if (transportAnimationFrameRef.current) {
-        cancelAnimationFrame(
-          transportAnimationFrameRef.current
-        );
-        transportAnimationFrameRef.current = null;
-      }
-      stopAllTransportAudio();
-      return;
-    }
-
-    transportAnimationFrameRef.current =
-      requestAnimationFrame(step);
+    setTimeout(() => {
+      trackModel.setActiveKeyIds((prev) =>
+        prev.filter((id) => id !== key.id)
+      );
+    }, 200);
   };
 
-  transportAnimationFrameRef.current =
-    requestAnimationFrame(step);
-};
+  // --- Keyboard handlers (computer keyboard → piano keys) ---
+  // NOTE: if you had keydown/keyup listeners in the old monolithic hook,
+  // you probably moved them to the page component or elsewhere.
+  // The audioEngine already exposes handleKeyMouseDown / handleKeyMouseEnter
+  // for the visual piano component. The actual keyboard events can still
+  // be wired up in the React component using KEYS + getKeyIndexForKeyboardChar
+  // if needed.
 
- // Play button in the UI: same behavior as the Space bar
-const handleGlobalPlay = () => {
-  toggleTransportPlay();
-};
-
-  // ---------- SERVER RECORDINGS ----------
-  const fetchRecordings = async () => {
-    try {
-      setRecordingsError(null);
-      const res = await fetch(`${API_BASE}/api/recordings`);
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      const data = await res.json();
-      setRecordings(data.recordings || data);
-    } catch (err) {
-      console.error("Failed to fetch recordings:", err);
-      setRecordingsError(err.message || "Unknown error");
-    }
-  };
-
-  // Load existing recordings once on mount (optional)
-  useEffect(() => {
-    fetchRecordings();
-  }, []);
-
-  // ---------- RECORDING CONTROL ----------
-  const handleTrackRecordToggle = (trackId) => {
-    const ctx = getAudioContext();
-    if (!ctx || !mediaRecorderRef.current) return;
-
-    const recorder = mediaRecorderRef.current;
-
-    // If currently recording, stop
-    if (recorder.state === "recording") {
-      recorder.stop();
-      return;
-    }
-
-    // Otherwise start recording on this track
-    recordingTargetTrackIdRef.current = trackId;
-    setActiveRecordingTrackId(trackId);
-
-    // Remember when we started (for duration) and where the head was on the strip
-    recordStartTimeRef.current = performance.now();
-
-    const track = tracksRef.current.find((t) => t.id === trackId);
-    const headPos =
-      track && (track.headPos != null ? track.headPos : track.tapeHeadPos || 0);
-    recordInitialHeadPosRef.current = headPos || 0;
-
-    recorder.start();
-  };
-
-    const handleRoomRecordToggle = () => {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder) return;
-
-    // If we’re already recording *room*, stop it
-    if (recorder.state === "recording" && isRoomRecording) {
-      recorder.stop();
-      setIsRoomRecording(false);
-      return;
-    }
-
-    // Don’t allow room recording if we’re doing a track-specific recording
-    if (recorder.state === "recording" && !isRoomRecording) {
-      console.warn("Already recording a track; stop that first.");
-      return;
-    }
-
-    // Start a new "room" recording: no specific track target
-    recordingTargetTrackIdRef.current = null;
-    recordStartTimeRef.current = performance.now();
-    recorder.start();
-    setIsRoomRecording(true);
-  };
-
-
-  // ---------- KEYBOARD SHORTCUTS ----------
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      const targetTag = e.target.tagName.toLowerCase();
-      if (targetTag === "input" || targetTag === "textarea") return;
-
-      // Space = play / pause from tape head
-          if (e.code === "Space" || e.key === " ") {
-            e.preventDefault();
-            toggleTransportPlay();
-            return;
-          }
-
-
-      // Enter = start/stop recording on selected track
-      if (e.key === "Enter") {
-        e.preventDefault();
-        if (selectedTrackId != null) {
-          handleTrackRecordToggle(selectedTrackId);
-        }
-        return;
-      }
-
-      const keyIndex = getKeyIndexForKeyboardChar(e.key);
-      if (keyIndex !== -1 && keyIndex >= 0 && keyIndex < KEYS.length) {
-        const keyObj = KEYS[keyIndex];
-        pressKeyVisual(keyObj.id);
-        playNote(keyObj.freq);
-      }
-    };
-
-    const handleKeyUp = (e) => {
-      const keyIndex = getKeyIndexForKeyboardChar(e.key);
-      if (keyIndex !== -1 && keyIndex >= 0 && keyIndex < KEYS.length) {
-        const keyObj = KEYS[keyIndex];
-        releaseKeyVisual(keyObj.id);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
-    };
-  }, [selectedTrackId, playNote, toggleTransportPlay, handleTrackRecordToggle]);
-
-  // ---------- RETURN API ----------
   return {
-    // state
-    waveform,
-    setWaveform,
-    effect,
-    setEffect,
-    recordings,
-    recordingsError,
-    waveCanvasRef,
-
-    mouseMode,
-    setMouseMode,
-
-    tracks,
-    selectedTrackId,
-    setSelectedTrackId,
-    globalZoom,
-    changeZoom,
-    handleGlobalPlay,
-    addTrack,
-    handleTrackRecordToggle,
-    activeRecordingTrackId,
-
-    handleTrackStripMouseDown,
-    handleTrackStripMouseMove,
-    trackCanvasRefs,
-
-    activeKeyIds,
+    // ===== Audio engine / piano =====
+    waveform: audioEngine.waveform,
+    setWaveform: audioEngine.setWaveform,
+    effect: audioEngine.effect,
+    setEffect: audioEngine.setEffect,
+    waveCanvasRef: audioEngine.waveCanvasRef,
+    activeKeyIds: trackModel.activeKeyIds,
     handleKeyMouseDown,
     handleKeyMouseEnter,
-    roomId,
-    roomStatus,
-    isRoomModalOpen,
-    openRoomModal,
-    closeRoomModal,
-    connectToRoom,
-    disconnectRoom,
-    handleRoomRecordToggle,
-    isRoomRecording,
-    roomUsernames,
+
+    // ===== Mouse mode / transport + tape head (from trackModel) =====
+    mouseMode: trackModel.mouseMode,
+    setMouseMode: trackModel.setMouseMode,
+    globalZoom: trackModel.globalZoom,
+    changeZoom: trackModel.changeZoom,
+    handleGlobalPlay: trackModel.handleGlobalPlay,
+    handleTrackStripMouseDown: trackModel.handleTrackStripMouseDown,
+    handleTrackStripMouseMove: trackModel.handleTrackStripMouseMove,
+    moveTrackRecording: trackModel.moveTrackRecording,
+
+    // ===== Tracks =====
+    tracks: trackModel.tracks,
+    trackCanvasRefs: trackModel.trackCanvasRefs,
+    selectedTrackId: trackModel.selectedTrackId,
+    setSelectedTrackId: trackModel.setSelectedTrackId,
+    addTrack: trackModel.addTrack,
+    activeRecordingTrackId: trackModel.activeRecordingTrackId,
+
+    // ===== Recording controls + recordings list =====
+    recordings: recording.recordings,
+    recordingsError: recording.recordingsError,
+    handleTrackRecordToggle: recording.handleTrackRecordToggle,
+    handleRoomRecordToggle: recording.handleRoomRecordToggle,
+    isRoomRecording: recording.isRoomRecording,
+
+    // ===== Room / networking =====
+    roomId: room.roomId,
+    roomStatus: room.roomStatus,
+    isRoomModalOpen: room.isRoomModalOpen,
+    openRoomModal: room.openRoomModal,
+    closeRoomModal: room.closeRoomModal,
+    connectToRoom: room.connectToRoom,
+    disconnectRoom: room.disconnectRoom,
+    roomUsernames: room.roomUsernames,
   };
 }

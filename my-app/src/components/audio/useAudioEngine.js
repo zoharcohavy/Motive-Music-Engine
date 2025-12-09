@@ -11,6 +11,7 @@ export function useAudioEngine(options = {}) {
   const recordDestRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const recordingChunksRef = useRef([]);
+  const waveCanvasRef = useRef(null);
 
   const [waveform, setWaveform] = useState("sine");
   const [effect, setEffect] = useState("none");
@@ -29,6 +30,7 @@ export function useAudioEngine(options = {}) {
       const masterGain = ctx.createGain();
       masterGain.gain.value = 0.5;
       masterGain.connect(ctx.destination);
+      masterGain.connect(analyser);
       masterGainRef.current = masterGain;
     }
     return audioCtxRef.current;
@@ -139,6 +141,10 @@ export function useAudioEngine(options = {}) {
     setWaveform,
     effect,
     setEffect,
+
+    // low-level helpers
+    getAudioContext,
+    getConvolver,
 
     // actions
     playNote,
