@@ -29,7 +29,7 @@ export default function HomePage() {
       </div>
 
       <div>
-        <Link to="/tone-test">
+        <Link to="/piano">
           <button>Piano/synth</button>
         </Link>
         <br />

@@ -9,7 +9,7 @@ import PianoKeyboard from "../components/audio/PianoKeyboard";
 import RoomModal from "../components/audio/RoomModal";
 
 
-export default function ToneTestPage() {
+export default function PianoPage() {
   const {
     waveform,
     setWaveform,
