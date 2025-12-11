@@ -2,16 +2,16 @@ import React from "react";
 
 const BASE_STRIP_SECONDS = 10;
 
-const getStripSecondsForTrack = (track) => {
+const getTrackLengthForTrack = (track) => {
   const zoom = track.zoom || 1;
   return BASE_STRIP_SECONDS / zoom;
 };
 
 const getHeadSecondsForTrack = (track) => {
-  const stripSeconds = getStripSecondsForTrack(track);
+  const trackLength = getTrackLengthForTrack(track);
   const headPos =
     track.headPos != null ? track.headPos : track.tapeHeadPos || 0;
-  return stripSeconds * headPos;
+  return trackLength * headPos;
 };
 
 export default function TrackSection({

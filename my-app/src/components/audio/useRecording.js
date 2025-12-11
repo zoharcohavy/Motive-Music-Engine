@@ -50,7 +50,7 @@ export function useRecording({
 
   const BASE_STRIP_SECONDS = 10;
 
-  const getStripSeconds = (track) => {
+  const getTrackLength = (track) => {
     const zoom = track.zoom || 1;
     return BASE_STRIP_SECONDS / zoom;
   };
@@ -142,9 +142,9 @@ export function useRecording({
           prev.map((track) => {
             if (track.id !== targetTrackId) return track;
 
-            const stripSeconds = getStripSeconds(track);
+            const trackLength = getTrackLength(track);
             const clipStartFrac = recordInitialHeadPosRef.current || 0; // 0..1
-            const clipStartTime = clipStartFrac * stripSeconds;
+            const clipStartTime = clipStartFrac * trackLength;
 
             const newClip = {
               id: crypto.randomUUID(),
@@ -166,9 +166,9 @@ export function useRecording({
 
             // Move head to the end of this new clip (0..1 across strip)
             const stripEndTime = clipStartTime + duration;
-            const clampedEnd = Math.min(stripSeconds, stripEndTime);
+            const clampedEnd = Math.min(trackLength, stripEndTime);
             const headPos =
-              stripSeconds > 0 ? clampedEnd / stripSeconds : 0;
+              trackLength > 0 ? clampedEnd / trackLength : 0;
 
             return {
               ...track,
@@ -237,12 +237,12 @@ export function useRecording({
         const track = tracksNow.find((t) => t.id === targetTrackId);
 
         if (track) {
-          const stripSeconds = getStripSeconds(track);
+          const trackLength = getTrackLength(track);
           const startFrac = recordInitialHeadPosRef.current || 0;
 
           let headPos = startFrac;
-          if (stripSeconds > 0) {
-            headPos = startFrac + elapsedSec / stripSeconds;
+          if (trackLength > 0) {
+            headPos = startFrac + elapsedSec / trackLength;
           }
 
           if (headPos >= 1) {
@@ -252,7 +252,7 @@ export function useRecording({
             }
           }
 
-          const stripTime = headPos * stripSeconds;
+          const stripTime = headPos * trackLength;
           const existingClips = track.clips || [];
           const collided = existingClips.find((c) => {
             const start = c.startTime;
