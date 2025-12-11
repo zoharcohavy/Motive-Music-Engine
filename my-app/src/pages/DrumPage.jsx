@@ -5,7 +5,7 @@ import RecordingsPanel from "../components/audio/RecordingsPanel";
 import TopControls from "../components/audio/TopControls";
 import MouseModeToggle from "../components/audio/MouseModeToggle";
 import TrackSection from "../components/audio/TrackSection";
-import PianoKeyboard from "../components/audio/PianoKeyboard";
+//import DrumMachine from "../components/audio/DrumMachine";
 import RoomModal from "../components/audio/RoomModal";
 
 
