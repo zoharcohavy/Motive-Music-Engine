@@ -57,7 +57,7 @@ export function useTrackModel(options = {}) {
 
   // ---------- Helpers ----------
 
-  const getStripSeconds = (track) => {
+  const getTrackLength = (track) => {
     const zoom = track.zoom || 1;
     return BASE_STRIP_SECONDS / zoom;
   };
@@ -128,8 +128,8 @@ export function useTrackModel(options = {}) {
     setTracks((prev) =>
       prev.map((track) => {
         if (track.id !== trackId) return track;
-        const stripSeconds = getStripSeconds(track);
-        const newStartTime = stripSeconds > 0 ? newStartFrac * stripSeconds : 0;
+        const trackLength = getTrackLength(track);
+        const newStartTime = trackLength > 0 ? newStartFrac * trackLength : 0;
 
         if (!track.clips || track.clips.length === 0) {
           return track;
@@ -166,8 +166,8 @@ export function useTrackModel(options = {}) {
     const track = tracksNow.find((t) => t.id === trackId);
     if (!track) return;
 
-    const stripSeconds = getStripSeconds(track);
-    const clickTime = stripSeconds > 0 ? frac * stripSeconds : 0;
+    const trackLength = getTrackLength(track);
+    const clickTime = trackLength > 0 ? frac * trackLength : 0;
     const clips = track.clips || [];
 
     // If we're in "clip" mode, see if we clicked on a clip and start dragging it
@@ -208,9 +208,9 @@ export function useTrackModel(options = {}) {
         prev.map((track) => {
           if (track.id !== fromTrackId) return track;
 
-          const stripSeconds = getStripSeconds(track);
+          const trackLength = getTrackLength(track);
           const clickTime =
-            stripSeconds > 0 ? frac * stripSeconds : 0;
+            trackLength > 0 ? frac * trackLength : 0;
 
           const newStartTime = Math.max(0, clickTime - offsetTime);
           const clips = track.clips || [];
@@ -308,19 +308,19 @@ const drawRoundedRect = (ctx, x, y, w, h, r) => {
       ctx.fillStyle = "#111";
       ctx.fillRect(0, 0, width, height);
 
-      const stripSeconds = getStripSeconds(track);
+      const trackLength = getTrackLength(track);
 
 // ===============================
 // DRAW CLIPS (white outline)
 // ===============================
 if (track.clips && track.clips.length > 0) {
-  const stripSeconds = getStripSeconds(track);
+  const trackLength = getTrackLength(track);
 
   track.clips.forEach((clip) => {
     const startFrac =
-      stripSeconds > 0 ? clip.startTime / stripSeconds : 0;
+      trackLength > 0 ? clip.startTime / trackLength : 0;
     const durFrac =
-      stripSeconds > 0 ? clip.duration / stripSeconds : 0;
+      trackLength > 0 ? clip.duration / trackLength : 0;
 
     const startX = startFrac * width;
     const clipWidth = Math.max(4, durFrac * width);
@@ -418,7 +418,7 @@ if (track.clips && track.clips.length > 0) {
     tracksRef,
 
     // helpers
-    getStripSeconds,
+    getTrackLength,
 
     // actions
     addTrack,

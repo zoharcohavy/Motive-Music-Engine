@@ -57,7 +57,7 @@ export function useTransport({ tracksRef, setTracks }) {
 
     // Use the zoom of the first track as the global zoom
     const zoomNow = (tracksNow[0] && tracksNow[0].zoom) || 1;
-    const stripSeconds = BASE_STRIP_SECONDS / zoomNow;
+    const trackLength = BASE_STRIP_SECONDS / zoomNow;
 
     // Get current head position from the first track (they should all be in sync)
     const currentHeadPos =
@@ -65,7 +65,7 @@ export function useTransport({ tracksRef, setTracks }) {
         ? tracksNow[0].headPos
         : tracksNow[0].tapeHeadPos || 0;
 
-    const startHeadTime = stripSeconds * currentHeadPos;
+    const startHeadTime = trackLength * currentHeadPos;
 
     isTransportPlayingRef.current = true;
     transportStartWallTimeRef.current = performance.now();
@@ -93,7 +93,7 @@ export function useTransport({ tracksRef, setTracks }) {
       }
 
       const zoomInner = (tracksInner[0] && tracksInner[0].zoom) || 1;
-      const stripSecondsInner = BASE_STRIP_SECONDS / zoomInner;
+      const trackLengthInner = BASE_STRIP_SECONDS / zoomInner;
 
       const now = performance.now();
       const elapsed = (now - transportStartWallTimeRef.current) / 1000;
@@ -102,15 +102,15 @@ export function useTransport({ tracksRef, setTracks }) {
       let headTime = startTime + elapsed;
       let reachedEnd = false;
 
-      if (stripSecondsInner > 0 && headTime >= stripSecondsInner) {
-        headTime = stripSecondsInner;
+      if (trackLengthInner > 0 && headTime >= trackLengthInner) {
+        headTime = trackLengthInner;
         reachedEnd = true;
       } else if (headTime < 0) {
         headTime = 0;
       }
 
       const newHeadPos =
-        stripSecondsInner > 0 ? headTime / stripSecondsInner : 0;
+        trackLengthInner > 0 ? headTime / trackLengthInner : 0;
 
       // Move the tape head on *all* tracks so UI stays in sync
       setTracks((prev) =>
