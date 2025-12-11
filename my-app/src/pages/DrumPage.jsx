@@ -1,15 +1,24 @@
 import React, { useEffect } from "react";
 import { useToneTestLogic } from "../components/audio/useToneTestLogic";
-import { KEYS, getKeyIndexForKeyboardChar } from "../components/audio/constants";
+import DrumMachine, {
+  DRUM_PADS,
+} from "../components/audio/SoundBoards/DrumMachine";
 import RecordingsPanel from "../components/audio/RecordingsPanel";
 import TopControls from "../components/audio/TopControls";
 import MouseModeToggle from "../components/audio/MouseModeToggle";
 import TrackSection from "../components/audio/TrackSection";
-//import DrumMachine from "../components/audio/DrumMachine";
 import RoomModal from "../components/audio/RoomModal";
 
 
 export default function DrumPage() {
+    // Map computer keyboard keys to drum pad indices (0–15)
+  const DRUM_KEY_MAP = [
+    "a", "s", "d", "f",   // pads 0–3
+    "j", "k", "l", ";",   // pads 4–7
+    "q", "w", "e", "r",   // pads 8–11
+    "u", "i", "o", "p",   // pads 12–15
+  ];
+
   const {
     waveform,
     setWaveform,
@@ -78,16 +87,19 @@ export default function DrumPage() {
       }
 
       // Map regular character keys to piano keys
+            // Map regular character keys to DRUM pads (instead of piano keys)
       if (e.key && e.key.length === 1) {
         const char = e.key.toLowerCase();
-        const keyIndex = getKeyIndexForKeyboardChar(char);
-        if (keyIndex >= 0 && keyIndex < KEYS.length) {
-          const pianoKey = KEYS[keyIndex];
-          if (pianoKey) {
-            handleKeyMouseDown(pianoKey);
+        const padIndex = DRUM_KEY_MAP.indexOf(char);
+
+        if (padIndex >= 0 && padIndex < DRUM_PADS.length) {
+          const pad = DRUM_PADS[padIndex];
+          if (pad) {
+            handleKeyMouseDown(pad);
           }
         }
       }
+
     };
 
     window.addEventListener("keydown", handleKeyDown);
@@ -124,23 +136,6 @@ export default function DrumPage() {
       {/* Spacer */}
       <div style={{ flexGrow: 1 }} />
 
-      {/* Live waveform visualizer */}
-      <div style={{ marginBottom: "0.75rem" }}>
-        <div style={{ fontSize: "0.8rem", marginBottom: "0.25rem" }}>
-          Live Waveform
-        </div>
-        <canvas
-          ref={waveCanvasRef}
-          style={{
-            width: "100%",
-            height: "120px",
-            borderRadius: "6px",
-            border: "1px solid #444",
-            background: "#111",
-          }}
-        />
-      </div>
-
       {/* Mouse mode toggle */}
       <MouseModeToggle mouseMode={mouseMode} setMouseMode={setMouseMode} />
 
@@ -162,6 +157,11 @@ export default function DrumPage() {
       />
 
       {/* Piano keyboard fixed at bottom */}
+      <DrumMachine
+        activeKeyIds={activeKeyIds}
+        onMouseDownKey={handleKeyMouseDown}
+        onMouseEnterKey={handleKeyMouseEnter}
+      />
       
       <RoomModal
         isOpen={isRoomModalOpen}
