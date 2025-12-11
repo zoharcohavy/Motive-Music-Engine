@@ -16,7 +16,7 @@ import { useRecording } from "./useRecording";
  * - Room (WebSocket rooms)
  * - Recording (MediaRecorder + track / room recordings)
  */
-export function useToneTestLogic() {
+export function useInstrumentPageLogic() {
   // We need a ref so the room callback can call audioEngine.playRemoteNote
   const audioEngineRef = useRef(null);
 

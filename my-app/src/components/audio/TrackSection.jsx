@@ -31,16 +31,7 @@ export default function TrackSection({
 }) {
   const hasTracks = tracks && tracks.length > 0;
   const firstTrack = hasTracks ? tracks[0] : null;
-  const globalHeadPos =
-    firstTrack && (firstTrack.headPos != null || firstTrack.tapeHeadPos != null)
-      ? firstTrack.headPos != null
-        ? firstTrack.headPos
-        : firstTrack.tapeHeadPos || 0
-      : 0;
-
-  const currentTimeSeconds = firstTrack
-    ? getHeadSecondsForTrack(firstTrack)
-    : 0;
+  const currentTimeSeconds = firstTrack ? getHeadSecondsForTrack(firstTrack) : 0;
 
   return (
     <div style={{ marginTop: "1.5rem" }}>

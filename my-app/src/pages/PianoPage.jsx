@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { useToneTestLogic } from "../components/audio/useToneTestLogic";
+import { useInstrumentPageLogic } from "../components/audio/useInstrumentPageLogic";
 import { KEYS, getKeyIndexForKeyboardChar } from "../components/audio/constants";
 import RecordingsPanel from "../components/audio/RecordingsPanel";
 import TopControls from "../components/audio/TopControls";
@@ -45,7 +45,7 @@ export default function PianoPage() {
     handleRoomRecordToggle,
     isRoomRecording,
     roomUsernames,
-  } = useToneTestLogic();
+  } = useInstrumentPageLogic();
   // Global keyboard shortcuts:
   // - Space: toggle playback from current tape-head position
   // - Enter: start/stop recording on the currently selected track
