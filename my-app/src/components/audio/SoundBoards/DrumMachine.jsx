@@ -10,8 +10,8 @@ import kickSample from "../../../assets/drum_samples/kick.wav";
 // 16 simple pads instead of piano KEYS
 // 16 pads with placeholder sample URLs
 export const DRUM_PADS = [
-  { id: 0,  name: "Kick 1",   sampleUrl: kickSample },
-  { id: 1,  name: "Snare 1",  sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 0,  name: "k",   sampleUrl: kickSample },
+  { id: 1,  name: "m",  sampleUrl: "../assets/drum_samples/kick.wav" },
   { id: 2,  name: "HiHat C",  sampleUrl: "../assets/drum_samples/kick.wav" },
   { id: 3,  name: "HiHat O",  sampleUrl: "../assets/drum_samples/kick.wav" },
 

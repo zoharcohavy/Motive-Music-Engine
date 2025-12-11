@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { useToneTestLogic } from "../components/audio/useToneTestLogic";
+import { useInstrumentPageLogic } from "../components/audio/useInstrumentPageLogic";
 import DrumMachine, {
   DRUM_PADS,
 } from "../components/audio/SoundBoards/DrumMachine";
@@ -54,7 +54,7 @@ export default function DrumPage() {
     handleRoomRecordToggle,
     isRoomRecording,
     roomUsernames,
-  } = useToneTestLogic();
+  } = useInstrumentPageLogic();
   // Global keyboard shortcuts:
   // - Space: toggle playback from current tape-head position
   // - Enter: start/stop recording on the currently selected track
@@ -155,14 +155,6 @@ export default function DrumPage() {
         handleTrackStripMouseMove={handleTrackStripMouseMove}
         trackCanvasRefs={trackCanvasRefs}
       />
-
-      {/* Piano keyboard fixed at bottom */}
-      <DrumMachine
-        activeKeyIds={activeKeyIds}
-        onMouseDownKey={handleKeyMouseDown}
-        onMouseEnterKey={handleKeyMouseEnter}
-      />
-      
       <RoomModal
         isOpen={isRoomModalOpen}
         onClose={closeRoomModal}
@@ -172,6 +164,13 @@ export default function DrumPage() {
         disconnectRoom={disconnectRoom}
       />
 
+      {/* drum machine */}
+      <DrumMachine
+        activeKeyIds={activeKeyIds}
+        onMouseDownKey={handleKeyMouseDown}
+        onMouseEnterKey={handleKeyMouseEnter}
+      />
+      
     </div>
   );
 }
