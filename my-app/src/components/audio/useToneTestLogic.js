@@ -79,17 +79,26 @@ export function useToneTestLogic() {
   
   // --- Keyboard handlers for the PianoKeyboard component ---
   const handleKeyMouseDown = (key) => {
-    if (!key || typeof key.freq !== "number") return;
+    if (!key) return;
 
-    // Mark this key as active (for visual highlight)
+    const hasFreq = typeof key.freq === "number";
+    const hasSample = typeof key.sampleUrl === "string";
+
+    if (!hasFreq && !hasSample) return;
+
+    // Highlight key/pad
     trackModel.setActiveKeyIds((prev) =>
       prev.includes(key.id) ? prev : [...prev, key.id]
     );
 
-    // Play the note through the audio engine
-    audioEngine.playNote(key.freq, { source: "local" });
+    // Play piano note OR drum sample
+    if (hasSample && audioEngine.playSample) {
+      audioEngine.playSample(key.sampleUrl, { source: "local" });
+    } else if (hasFreq) {
+      audioEngine.playNote(key.freq, { source: "local" });
+    }
 
-    // Clear the active state after a short delay so the key visual resets
+    // Clear highlight shortly after
     setTimeout(() => {
       trackModel.setActiveKeyIds((prev) =>
         prev.filter((id) => id !== key.id)
@@ -98,14 +107,22 @@ export function useToneTestLogic() {
   };
 
   const handleKeyMouseEnter = (key) => {
-    if (!key || typeof key.freq !== "number") return;
+    if (!key) return;
 
-    // Optional: you can later restrict this so it only fires when mouse is down
+    const hasFreq = typeof key.freq === "number";
+    const hasSample = typeof key.sampleUrl === "string";
+
+    if (!hasFreq && !hasSample) return;
+
     trackModel.setActiveKeyIds((prev) =>
       prev.includes(key.id) ? prev : [...prev, key.id]
     );
 
-    audioEngine.playNote(key.freq, { source: "local" });
+    if (hasSample && audioEngine.playSample) {
+      audioEngine.playSample(key.sampleUrl, { source: "local" });
+    } else if (hasFreq) {
+      audioEngine.playNote(key.freq, { source: "local" });
+    }
 
     setTimeout(() => {
       trackModel.setActiveKeyIds((prev) =>
@@ -113,6 +130,7 @@ export function useToneTestLogic() {
       );
     }, 200);
   };
+
 
   // --- Keyboard handlers (computer keyboard → piano keys) ---
   // NOTE: if you had keydown/keyup listeners in the old monolithic hook,

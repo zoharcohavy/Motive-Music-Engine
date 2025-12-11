@@ -14,6 +14,8 @@ export function useAudioEngine(options = {}) {
   const waveCanvasRef = useRef(null);
   const animationFrameRef = useRef(null);
 
+  const sampleBuffersRef = useRef(new Map());
+
   const [waveform, setWaveform] = useState("sine");
   const [effect, setEffect] = useState("none");
 
@@ -184,6 +186,34 @@ export function useAudioEngine(options = {}) {
     }
   };
 
+  const playSample = async (
+    sampleUrl,
+    {
+      source = "local",
+      // You could later add per-sample gain or other options here
+    } = {}
+  ) => {
+    if (!sampleUrl) return;
+
+    const ctx = getAudioContext();
+    const masterGain = masterGainRef.current;
+    if (!ctx || !masterGain) return;
+
+    const buffer = await loadSample(ctx, sampleUrl);
+    if (!buffer) return;
+
+    const sourceNode = ctx.createBufferSource();
+    sourceNode.buffer = buffer;
+
+    // Route through masterGain so it gets recorded like the piano
+    sourceNode.connect(masterGain);
+    sourceNode.start();
+
+    // OPTIONAL: if you want to broadcast drums to the room later,
+    // you could send a message here similar to playNote().
+  };
+
+
   // Play a note coming from a remote user
   const playRemoteNote = (
     freq,
@@ -200,6 +230,28 @@ export function useAudioEngine(options = {}) {
   const setEffectFromRoom = (roomEffect) => {
     setEffect(roomEffect);
   };
+
+  const loadSample = async (ctx, url) => {
+    if (!url) return null;
+
+    // Check cache first
+    const cache = sampleBuffersRef.current;
+    if (cache.has(url)) {
+      return cache.get(url);
+    }
+
+    try {
+      const res = await fetch(url);
+      const arrayBuffer = await res.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      cache.set(url, audioBuffer);
+      return audioBuffer;
+    } catch (err) {
+      console.error("Failed to load sample:", url, err);
+      return null;
+    }
+  };
+
 
   return {
     // refs
@@ -224,6 +276,7 @@ export function useAudioEngine(options = {}) {
 
     // actions
     playNote,
+    playSample,
     playRemoteNote,
     setEffectFromRoom,
   };
