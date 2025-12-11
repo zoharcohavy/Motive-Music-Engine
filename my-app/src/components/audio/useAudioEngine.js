@@ -1,5 +1,5 @@
 // src/components/audio/useAudioEngine.js
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 
 export function useAudioEngine(options = {}) {
   const { roomStatus, sendRoomMessage } = options;
@@ -12,9 +12,84 @@ export function useAudioEngine(options = {}) {
   const mediaRecorderRef = useRef(null);
   const recordingChunksRef = useRef([]);
   const waveCanvasRef = useRef(null);
+  const animationFrameRef = useRef(null);
 
   const [waveform, setWaveform] = useState("sine");
   const [effect, setEffect] = useState("none");
+
+
+  useEffect(() => {
+    // Make sure we have an AudioContext + analyser
+    const ctx = getAudioContext(); // this will lazily create the context & analyser
+    const canvas = waveCanvasRef.current;
+    const analyser = analyserRef.current;
+    if (!ctx || !canvas || !analyser) return;
+
+    const canvasCtx = canvas.getContext("2d");
+    const bufferLength = analyser.fftSize;
+    const dataArray = new Uint8Array(bufferLength);
+
+    // Optional: ensure canvas internal size matches CSS size for sharper drawing
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+    canvasCtx.scale(dpr, dpr);
+
+    const draw = () => {
+      const width = rect.width;
+      const height = rect.height;
+      analyser.getByteTimeDomainData(dataArray);
+      // Clear background
+      canvasCtx.fillStyle = "#111";
+      canvasCtx.fillRect(0, 0, width, height);
+
+      // Choose color based on waveform type so you can visually see square vs sine, etc.
+      let strokeColor = "#66ff99";
+      switch (waveform) {
+        case "square":
+          strokeColor = "#ffcc00";
+          break;
+        case "triangle":
+          strokeColor = "#00ccff";
+          break;
+        case "sawtooth":
+          strokeColor = "#ff66cc";
+          break;
+        default:
+          strokeColor = "#66ff99"; // sine / anything else
+      }
+      canvasCtx.lineWidth = 2;
+      canvasCtx.strokeStyle = strokeColor;
+      canvasCtx.beginPath();
+      const sliceWidth = width / bufferLength;
+      let x = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0; // 0–255 → around 0–2
+        const y = (v * height) / 2;     // center around midline
+
+        if (i === 0) {
+          canvasCtx.moveTo(x, y);
+        } else {
+          canvasCtx.lineTo(x, y);
+        }
+        x += sliceWidth;
+      }
+      canvasCtx.stroke();
+      animationFrameRef.current = window.requestAnimationFrame(draw);
+    };
+
+    draw();
+
+    return () => {
+        if (animationFrameRef.current) {
+            window.cancelAnimationFrame(animationFrameRef.current);
+            animationFrameRef.current = null;
+        }
+    };
+  }, [waveform]); // re-run if waveform type changes
+
 
   // Lazily create and wire up the AudioContext + analyser + masterGain
   const getAudioContext = () => {
@@ -135,6 +210,7 @@ export function useAudioEngine(options = {}) {
     recordDestRef,
     mediaRecorderRef,
     recordingChunksRef,
+    waveCanvasRef,
 
     // state
     waveform,
