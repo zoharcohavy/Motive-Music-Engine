@@ -7,7 +7,7 @@ export default function MouseModeToggle({ mouseMode, setMouseMode }) {
         marginTop: "0.5rem",
         marginBottom: "0.25rem",
         fontSize: "0.8rem",
-        color: "#000000ff",
+        color: "rgba(232, 244, 242, 0.92)",
         display: "flex",
         alignItems: "center",
         gap: "0.75rem",

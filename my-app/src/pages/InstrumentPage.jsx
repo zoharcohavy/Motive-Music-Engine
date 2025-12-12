@@ -12,6 +12,9 @@ import DrumMachine from "../components/audio/SoundBoards/DrumMachine";
 import { KEYS, getKeyIndexForKeyboardChar } from "../components/audio/constants";
 import { useInstrumentHotkeys } from "../components/audio/useInstrumentHotkeys";
 import { useDrumPadConfig } from "../components/audio/useDrumPadConfig";
+import { usePersistedState } from "../components/audio/usePersistedState";
+import CollapsibleNotice from "../components/ui/CollapsibleNotice";
+
 
 export default function InstrumentPage({ instrument }) {
   const {
@@ -57,6 +60,16 @@ export default function InstrumentPage({ instrument }) {
     isRoomRecording,
     roomUsernames,
   } = useInstrumentPageLogic();
+// Hide advanced panels by default, but remember the user's choice.
+  const [isWaveformOpen, setIsWaveformOpen] = usePersistedState(
+    "ui.instrumentPage.waveformOpen",
+    false
+  );
+  const [isMouseModeOpen, setIsMouseModeOpen] = usePersistedState(
+    "ui.instrumentPage.mouseModeOpen",
+    false
+  );
+
 
   // Drum customization foundation (pads + key bindings persisted in localStorage)
   const drumConfig = useDrumPadConfig();
@@ -88,7 +101,7 @@ export default function InstrumentPage({ instrument }) {
   const isDrums = instrument === "drums";
 
   return (
-    <div className="tone-test-page" style={{ padding: "1rem" }}>
+    <div className="tone-test-page app-shell">
       {/* Recordings list in upper-right */}
       <RecordingsPanel recordings={recordings} recordingsError={recordingsError} />
 
@@ -107,22 +120,30 @@ export default function InstrumentPage({ instrument }) {
         roomUsernames={roomUsernames}
       />
 
-      {/* Analyser / visualization */}
-      <div style={{ marginTop: "12px" }}>
-        <canvas
-          ref={waveCanvasRef}
-          style={{
-            width: "100%",
-            height: "120px",
-            borderRadius: "6px",
-            border: "1px solid #444",
-            background: "#111",
-          }}
-        />
-      </div>
+            {/* Live waveform (collapsible) */}
+      <CollapsibleNotice
+        title="Live waveform"
+        subtitle="(click to expand)"
+        isOpen={isWaveformOpen}
+        setIsOpen={setIsWaveformOpen}
+      >
+        <div className="card">
+          <canvas ref={waveCanvasRef} className="wave-canvas" />
+        </div>
+      </CollapsibleNotice>
 
-      {/* Mouse mode toggle */}
-      <MouseModeToggle mouseMode={mouseMode} setMouseMode={setMouseMode} />
+      {/* Mouse mode (collapsible) */}
+      <CollapsibleNotice
+        title="Mouse mode"
+        subtitle="(advanced)"
+        isOpen={isMouseModeOpen}
+        setIsOpen={setIsMouseModeOpen}
+      >
+        <div className="card">
+          <MouseModeToggle mouseMode={mouseMode} setMouseMode={setMouseMode} />
+        </div>
+      </CollapsibleNotice>
+
 
       {/* Tracks */}
       <TrackSection

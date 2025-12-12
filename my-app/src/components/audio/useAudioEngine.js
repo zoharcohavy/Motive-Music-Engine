@@ -20,77 +20,104 @@ export function useAudioEngine(options = {}) {
   const [effect, setEffect] = useState("none");
 
 
-  useEffect(() => {
-    // Make sure we have an AudioContext + analyser
-    const ctx = getAudioContext(); // this will lazily create the context & analyser
+useEffect(() => {
+  let cancelled = false;
+
+  // Ensure audio graph exists
+  getAudioContext();
+
+  const loop = () => {
+    if (cancelled) return;
+
     const canvas = waveCanvasRef.current;
     const analyser = analyserRef.current;
-    if (!ctx || !canvas || !analyser) return;
+
+    // Canvas might not be mounted yet
+    if (!canvas || !analyser) {
+      animationFrameRef.current = window.requestAnimationFrame(loop);
+      return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+
+    // When collapsed (display:none), rect will be 0x0 — just wait
+    if (rect.width === 0 || rect.height === 0) {
+      animationFrameRef.current = window.requestAnimationFrame(loop);
+      return;
+    }
 
     const canvasCtx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+
+    // Keep internal resolution synced to displayed size
+    const nextW = Math.floor(rect.width * dpr);
+    const nextH = Math.floor(rect.height * dpr);
+    if (canvas.width !== nextW || canvas.height !== nextH) {
+      canvas.width = nextW;
+      canvas.height = nextH;
+    }
+
+    // Reset transform each frame (avoids cumulative scaling bugs)
+    canvasCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
     const bufferLength = analyser.fftSize;
     const dataArray = new Uint8Array(bufferLength);
+    analyser.getByteTimeDomainData(dataArray);
 
-    // Optional: ensure canvas internal size matches CSS size for sharper drawing
-    const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = rect.width * dpr;
-    canvas.height = rect.height * dpr;
-    canvasCtx.scale(dpr, dpr);
+    const width = rect.width;
+    const height = rect.height;
 
-    const draw = () => {
-      const width = rect.width;
-      const height = rect.height;
-      analyser.getByteTimeDomainData(dataArray);
-      // Clear background
-      canvasCtx.fillStyle = "#111";
-      canvasCtx.fillRect(0, 0, width, height);
+    // Clear
+    canvasCtx.fillStyle = "#111";
+    canvasCtx.fillRect(0, 0, width, height);
 
-      // Choose color based on waveform type so you can visually see square vs sine, etc.
-      let strokeColor = "#66ff99";
-      switch (waveform) {
-        case "square":
-          strokeColor = "#ffcc00";
-          break;
-        case "triangle":
-          strokeColor = "#00ccff";
-          break;
-        case "sawtooth":
-          strokeColor = "#ff66cc";
-          break;
-        default:
-          strokeColor = "#66ff99"; // sine / anything else
-      }
-      canvasCtx.lineWidth = 2;
-      canvasCtx.strokeStyle = strokeColor;
-      canvasCtx.beginPath();
-      const sliceWidth = width / bufferLength;
-      let x = 0;
+    // Stroke color by waveform
+    let strokeColor = "#66ff99";
+    switch (waveform) {
+      case "square":
+        strokeColor = "#ffcc00";
+        break;
+      case "triangle":
+        strokeColor = "#00ccff";
+        break;
+      case "sawtooth":
+        strokeColor = "#ff66cc";
+        break;
+      default:
+        strokeColor = "#66ff99";
+    }
 
-      for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 128.0; // 0–255 → around 0–2
-        const y = (v * height) / 2;     // center around midline
+    canvasCtx.lineWidth = 2;
+    canvasCtx.strokeStyle = strokeColor;
+    canvasCtx.beginPath();
 
-        if (i === 0) {
-          canvasCtx.moveTo(x, y);
-        } else {
-          canvasCtx.lineTo(x, y);
-        }
-        x += sliceWidth;
-      }
-      canvasCtx.stroke();
-      animationFrameRef.current = window.requestAnimationFrame(draw);
-    };
+    const sliceWidth = width / bufferLength;
+    let x = 0;
 
-    draw();
+    for (let i = 0; i < bufferLength; i++) {
+      const v = dataArray[i] / 128.0;
+      const y = (v * height) / 2;
 
-    return () => {
-        if (animationFrameRef.current) {
-            window.cancelAnimationFrame(animationFrameRef.current);
-            animationFrameRef.current = null;
-        }
-    };
-  }, [waveform]); // re-run if waveform type changes
+      if (i === 0) canvasCtx.moveTo(x, y);
+      else canvasCtx.lineTo(x, y);
+
+      x += sliceWidth;
+    }
+
+    canvasCtx.stroke();
+    animationFrameRef.current = window.requestAnimationFrame(loop);
+  };
+
+  loop();
+
+  return () => {
+    cancelled = true;
+    if (animationFrameRef.current) {
+      window.cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+  };
+}, [waveform]);
 
 
   // Lazily create and wire up the AudioContext + analyser + masterGain
