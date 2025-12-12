@@ -26,8 +26,8 @@ export default function MouseModeToggle({ mouseMode, setMouseMode }) {
       <label>
         <input
           type="radio"
-          checked={mouseMode === "clips"}
-          onChange={() => setMouseMode("clips")}
+          checked={mouseMode === "clip"}
+          onChange={() => setMouseMode("clip")}
           style={{ marginRight: "0.25rem" }}
         />
         Move recordings between tracks
@@ -39,7 +39,7 @@ export default function MouseModeToggle({ mouseMode, setMouseMode }) {
           onChange={() => setMouseMode("delete")}
           style={{ marginRight: "0.25rem" }}
         />
-        Delete tracks
+        Delete clips
       </label>
     </div>
   );

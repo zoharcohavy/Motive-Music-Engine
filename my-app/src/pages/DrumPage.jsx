@@ -36,10 +36,12 @@ export default function DrumPage() {
     changeZoom,
     handleGlobalPlay,
     addTrack,
+    deleteTrack,
     handleTrackRecordToggle,
     activeRecordingTrackId,
     handleTrackStripMouseDown,
     handleTrackStripMouseMove,
+    handleTrackStripContextMenu,
     trackCanvasRefs,
     activeKeyIds,
     handleKeyMouseDown,
@@ -148,11 +150,13 @@ export default function DrumPage() {
         changeZoom={changeZoom}
         handleGlobalPlay={handleGlobalPlay}
         addTrack={addTrack}
+        deleteTrack={deleteTrack}
         handleTrackRecordToggle={handleTrackRecordToggle}
         activeRecordingTrackId={activeRecordingTrackId}
         mouseMode={mouseMode}
         handleTrackStripMouseDown={handleTrackStripMouseDown}
         handleTrackStripMouseMove={handleTrackStripMouseMove}
+        handleTrackStripContextMenu={handleTrackStripContextMenu}
         trackCanvasRefs={trackCanvasRefs}
       />
       <RoomModal

@@ -159,6 +159,7 @@ export function useInstrumentPageLogic() {
     handleGlobalPlay: trackModel.handleGlobalPlay,
     handleTrackStripMouseDown: trackModel.handleTrackStripMouseDown,
     handleTrackStripMouseMove: trackModel.handleTrackStripMouseMove,
+    handleTrackStripContextMenu: trackModel.handleTrackStripContextMenu,
     moveTrackRecording: trackModel.moveTrackRecording,
 
     // ===== Tracks =====
@@ -167,6 +168,7 @@ export function useInstrumentPageLogic() {
     selectedTrackId: trackModel.selectedTrackId,
     setSelectedTrackId: trackModel.setSelectedTrackId,
     addTrack: trackModel.addTrack,
+    deleteTrack: trackModel.deleteTrack,
     activeRecordingTrackId: trackModel.activeRecordingTrackId,
 
     // ===== Recording controls + recordings list =====

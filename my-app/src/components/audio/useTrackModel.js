@@ -37,7 +37,7 @@ export function useTrackModel(options = {}) {
   const [globalZoom, setGlobalZoom] = useState(1);
   const [activeRecordingTrackId, setActiveRecordingTrackId] = useState(null);
   const [selectedTrackId, setSelectedTrackId] = useState(0);
-  const [mouseMode, setMouseMode] = useState("head"); // "head" | "clip"
+  const [mouseMode, setMouseMode] = useState("head"); // head | clips | delete
   const [activeKeyIds, setActiveKeyIds] = useState([]);
 
   // ---------- Refs ----------
@@ -109,6 +109,17 @@ export function useTrackModel(options = {}) {
     setNextTrackId((id) => id + 1);
   };
 
+  const deleteTrack = (trackId) => {
+    // Remove the track from the list
+    setTracks((prevTracks) => prevTracks.filter((t) => t.id !== trackId));
+
+    // If this track was armed for recording, clear that
+    setActiveRecordingTrackId((prevActive) =>
+      prevActive === trackId ? null : prevActive
+    );
+  };
+
+
   // change global zoom; all tracks share the same zoom
   const changeZoom = (delta) => {
     setGlobalZoom((prev) => {
@@ -155,7 +166,7 @@ export function useTrackModel(options = {}) {
     );
   };
 
-  // ---------- Mouse interaction on track strips ----------
+    // ---------- Mouse interaction on track strips ----------
 
   const handleTrackStripMouseDown = (trackId, e) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -170,75 +181,212 @@ export function useTrackModel(options = {}) {
     const clickTime = trackLength > 0 ? frac * trackLength : 0;
     const clips = track.clips || [];
 
-    // If we're in "clip" mode, see if we clicked on a clip and start dragging it
-    if (mouseMode === "clip" && clips.length > 0) {
+    // --- DELETE MODE: delete a single clip under the cursor ---
+    if (mouseMode === "delete") {
       const clickedClip = clips.find((c) => {
         const start = c.startTime;
         const end = c.startTime + c.duration;
         return clickTime >= start && clickTime <= end;
       });
 
-      if (clickedClip) {
-        const offsetTime = clickTime - clickedClip.startTime;
-        draggingClipRef.current = {
-          trackId,
-          clipId: clickedClip.id,
-          offsetTime,
-        };
+      if (!clickedClip) {
+        // click was in empty space -> do nothing
         return;
       }
+
+      setTracks((prev) =>
+        prev.map((t) =>
+          t.id !== trackId
+            ? t
+            : {
+                ...t,
+                clips: (t.clips || []).filter((c) => c.id !== clickedClip.id),
+              }
+        )
+      );
+
+      // No dragging, no head movement in delete mode
+      return;
     }
 
-    // Otherwise, we’re moving the tape-head
+    // --- CLIP MODE: start dragging a clip if we clicked one ---
+    if (mouseMode === "clip") {
+      if (clips.length > 0) {
+        const clickedClip = clips.find((c) => {
+          const start = c.startTime;
+          const end = c.startTime + c.duration;
+          return clickTime >= start && clickTime <= end;
+        });
+
+        if (clickedClip) {
+          const offsetTime = clickTime - clickedClip.startTime;
+          draggingClipRef.current = {
+            trackId,
+            clipId: clickedClip.id,
+            offsetTime,
+          };
+        }
+      }
+
+      // In clip mode we never move the head when clicking the strip
+      return;
+    }
+
+    // --- HEAD MODE (default): move the tape head ---
     draggingHeadTrackIdRef.current = trackId;
     syncHeadPosAllTracks(frac);
   };
+
+
 
   const handleTrackStripMouseMove = (trackId, e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     let frac = (e.clientX - rect.left) / rect.width; // 0..1
     frac = Math.max(0, Math.min(1, frac));
 
-    // If a clip is being dragged, move that clip
-    if (draggingClipRef.current) {
+    // --- CLIP DRAGGING ---
+    if (mouseMode === "clip" && draggingClipRef.current) {
       const { trackId: fromTrackId, clipId, offsetTime } =
         draggingClipRef.current;
 
-      setTracks((prev) =>
-        prev.map((track) => {
-          if (track.id !== fromTrackId) return track;
+      // Same-track drag
+      if (fromTrackId === trackId) {
+        setTracks((prev) =>
+          prev.map((track) => {
+            if (track.id !== fromTrackId) return track;
 
-          const trackLength = getTrackLength(track);
-          const clickTime =
-            trackLength > 0 ? frac * trackLength : 0;
+            const trackLength = getTrackLength(track);
+            const clickTime = trackLength > 0 ? frac * trackLength : 0;
 
-          const newStartTime = Math.max(0, clickTime - offsetTime);
-          const clips = track.clips || [];
-          const moving = clips.find((c) => c.id === clipId);
-          if (!moving) return track;
+            const newStartTime = Math.max(0, clickTime - offsetTime);
+            const clips = track.clips || [];
+            const moving = clips.find((c) => c.id === clipId);
+            if (!moving) return track;
 
-          const candidate = { ...moving, startTime: newStartTime };
+            const candidate = { ...moving, startTime: newStartTime };
 
-          if (willOverlap(clips, candidate, clipId)) {
-            // overlap -> don’t move
-            return track;
-          }
+            // Prevent overlap on this track
+            if (willOverlap(clips, candidate, clipId)) {
+              // overlap -> don’t move
+              return track;
+            }
 
-          const newClips = clips.map((c) =>
-            c.id === clipId ? candidate : c
-          );
-          return { ...track, clips: newClips };
-        })
-      );
+            const newClips = clips.map((c) =>
+              c.id === clipId ? candidate : c
+            );
+
+            return {
+              ...track,
+              clips: newClips,
+            };
+          })
+        );
+
+        return;
+      }
+
+      // Cross-track drag: move clip from fromTrackId -> trackId
+      setTracks((prev) => {
+        // Copy tracks + clips so we can mutate safely
+        const tracksCopy = prev.map((t) => ({
+          ...t,
+          clips: t.clips ? [...t.clips] : [],
+        }));
+
+        const fromIdx = tracksCopy.findIndex((t) => t.id === fromTrackId);
+        const toIdx = tracksCopy.findIndex((t) => t.id === trackId);
+        if (fromIdx === -1 || toIdx === -1) return prev;
+
+        const fromTrack = tracksCopy[fromIdx];
+        const toTrack = tracksCopy[toIdx];
+
+        const movingClip = (fromTrack.clips || []).find(
+          (c) => c.id === clipId
+        );
+        if (!movingClip) return prev;
+
+        // Use the destination track's length to compute new time
+        const destLength = getTrackLength(toTrack);
+        const clickTime = destLength > 0 ? frac * destLength : 0;
+        const newStartTime = Math.max(0, clickTime - offsetTime);
+
+        const candidate = {
+          ...movingClip,
+          startTime: newStartTime,
+        };
+
+        // NO OVERLAP allowed on destination track
+        if (willOverlap(toTrack.clips || [], candidate, clipId)) {
+          // Reject the move, keep things as they were
+          return prev;
+        }
+
+        // Remove from origin
+        fromTrack.clips = fromTrack.clips.filter((c) => c.id !== clipId);
+        // Add to destination
+        toTrack.clips = [...(toTrack.clips || []), candidate];
+
+        return tracksCopy;
+      });
+
+      // Update drag ref to use the new track as the origin for further moves
+      draggingClipRef.current = {
+        trackId,
+        clipId,
+        offsetTime,
+      };
 
       return;
     }
 
-    // If tape-head is being dragged on this track, sync headPos
-    if (draggingHeadTrackIdRef.current === trackId) {
+    // --- TAPE HEAD DRAGGING ---
+    if (mouseMode === "head" && draggingHeadTrackIdRef.current === trackId) {
       syncHeadPosAllTracks(frac);
     }
   };
+
+    // Right-click delete for clips when in delete mode
+  const handleTrackStripContextMenu = (trackId, e) => {
+    // Only intercept right-clicks in delete mode; otherwise let the browser show its menu
+    if (mouseMode !== "delete") {
+      return;
+    }
+
+    e.preventDefault(); // stop the browser context menu
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    let frac = (e.clientX - rect.left) / rect.width; // 0..1 across the strip
+    frac = Math.max(0, Math.min(1, frac));
+
+    const tracksNow = tracksRef.current || [];
+    const track = tracksNow.find((t) => t.id === trackId);
+    if (!track) return;
+
+    const trackLength = getTrackLength(track);
+    const clickTime = trackLength > 0 ? frac * trackLength : 0;
+    const clips = track.clips || [];
+
+    // Find the clip under the mouse at this time
+    const clickedClip = clips.find((c) => {
+      const start = c.startTime;
+      const end = c.startTime + c.duration;
+      return clickTime >= start && clickTime <= end;
+    });
+
+    if (!clickedClip) return;
+
+    // Delete that clip only
+    setTracks((prev) =>
+      prev.map((t) => {
+        if (t.id !== trackId) return t;
+        return {
+          ...t,
+          clips: (t.clips || []).filter((c) => c.id !== clickedClip.id),
+        };
+      })
+    );
+  };
+
 
   const stopDragging = () => {
     draggingHeadTrackIdRef.current = null;
@@ -422,10 +570,12 @@ if (track.clips && track.clips.length > 0) {
 
     // actions
     addTrack,
+    deleteTrack,
     changeZoom,
     moveTrackRecording,
     handleTrackStripMouseDown,
     handleTrackStripMouseMove,
+    handleTrackStripContextMenu,
     stopDragging,
 
     handleGlobalPlay,
