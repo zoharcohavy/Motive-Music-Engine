@@ -22,11 +22,13 @@ export default function TrackSection({
   changeZoom,
   handleGlobalPlay,
   addTrack,
+  deleteTrack,
   handleTrackRecordToggle,
   activeRecordingTrackId,
   mouseMode,
   handleTrackStripMouseDown,
   handleTrackStripMouseMove,
+  handleTrackStripContextMenu,
   trackCanvasRefs,
 }) {
   const hasTracks = tracks && tracks.length > 0;
@@ -164,26 +166,28 @@ export default function TrackSection({
                 gap: "0.2rem",
               }}
             >
-              <button
-                type="button"
-                onClick={() => setSelectedTrackId(track.id)}
-                style={{
-                  padding: "0.2rem 0.4rem",
-                  fontSize: "0.7rem",
-                  borderRadius: "4px",
-                  border:
-                    track.id === selectedTrackId
-                      ? "1px solid #fff"
-                      : "1px solid #555",
-                  background:
-                    track.id === selectedTrackId ? "#333" : "#191919",
-                  color: "#fff",
-                  cursor: "pointer",
-                  textAlign: "left",
-                }}
-              >
-                Track {track.id + 1}
-              </button>
+            <button
+              type="button"
+              onClick={() => setSelectedTrackId(track.id)}
+              style={{
+                padding: "0.2rem 0.4rem",
+                fontSize: "0.7rem",
+                borderRadius: "4px",
+                border:
+                  track.id === selectedTrackId
+                    ? "1px solid #fff"
+                    : "1px solid #555",
+                background:
+                  track.id === selectedTrackId ? "#333" : "#191919",
+                color: "#fff",
+                cursor: "pointer",
+                textAlign: "left",
+              }}
+            >
+              Track {track.id + 1}
+            </button>
+
+
 
               <button
                 type="button"
@@ -220,22 +224,31 @@ export default function TrackSection({
             {/* Right: strip canvas for this track */}
             <div
               style={{
-              flex: 1,
-              height: "60px",
-              position: "relative",
-              background: "#141414",
-              borderRadius: "4px",
-              overflow: "hidden",
-              cursor: mouseMode === "head" ? "pointer" : "grab",
-            }}
-            onMouseDown={(e) => {
-              setSelectedTrackId(track.id);              // arm this track
-              handleTrackStripMouseDown(track.id, e);
-            }}
-            onMouseMove={(e) =>
-              handleTrackStripMouseMove(track.id, e)
-            }
+                flexGrow: 1,
+                background: "#141414",
+                borderRadius: "4px",
+                overflow: "hidden",
+                cursor:
+                  mouseMode === "delete"
+                    ? "pointer"
+                    : mouseMode === "head"
+                    ? "pointer"
+                    : "grab",
+              }}
+              onMouseDown={(e) => {
+                // Always select the track, then let the model decide:
+                //  - head mode -> move tape head
+                //  - clip mode -> start dragging a clip
+                //  - delete mode -> delete the clip under the cursor
+                setSelectedTrackId(track.id);
+                handleTrackStripMouseDown(track.id, e);
+              }}
+              onMouseMove={(e) =>
+                handleTrackStripMouseMove(track.id, e)
+              }
             >
+
+
 
               <canvas
                 ref={(el) => {
@@ -245,7 +258,7 @@ export default function TrackSection({
                   trackCanvasRefs.current[track.id] = el;
                 }}
                 width={800}
-                height={60}
+                height={40}
                 style={{
                   width: "100%",
                   height: "100%",
