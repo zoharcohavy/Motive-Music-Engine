@@ -1,14 +1,12 @@
 import { useRef } from "react";
 import { useAudioEngine } from "./useAudioEngine";
-import { useRoom } from "./useRoom";
-import { useTrackModel } from "./useTrackModel";
+import { useRoom } from "../Rooms/useRoom";
+import { useTrackModel } from "../Tracks/useTrackModel";
 import { useRecording } from "./useRecording";
 
 
 
 /**
- * Main orchestration hook for the ToneTest page.
- *
  * It wires together:
  * - Audio engine (local piano + waveform)
  * - Track model (tracks, tape head, zoom, dragging)
@@ -180,6 +178,7 @@ export function useInstrumentPageLogic() {
 
     // ===== Room / networking =====
     roomId: room.roomId,
+    username: room.username,
     roomStatus: room.roomStatus,
     isRoomModalOpen: room.isRoomModalOpen,
     openRoomModal: room.openRoomModal,

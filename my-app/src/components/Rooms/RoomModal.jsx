@@ -5,31 +5,33 @@ export default function RoomModal({
   onClose,
   roomStatus,
   roomId,
+  username,
   connectToRoom,
   disconnectRoom,
 }) {
-const [roomInput, setRoomInput] = useState("");
-const [usernameInput, setUsernameInput] = useState("");
+  const [roomInput, setRoomInput] = useState("");
+  const [usernameInput, setUsernameInput] = useState("");
 
-useEffect(() => {
-  // When you’re already in a room, pre-fill the room name
-  if (roomId) setRoomInput(roomId);
-}, [roomId]);
+  useEffect(() => {
+    if (roomId) setRoomInput(roomId);
+    if (username) setUsernameInput(username);
+  }, [roomId, username]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    if (roomId) setRoomInput(roomId);
+    if (username) setUsernameInput(username);
+  }, [isOpen, roomId, username]);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {
-  e.preventDefault();
-  const roomTrimmed = (roomInput || "").trim();
-  const userTrimmed = (usernameInput || "").trim();
-  if (!roomTrimmed || !userTrimmed) {
-    // both are required
-    return;
-  }
-  connectToRoom(roomTrimmed, userTrimmed);
-};
-
+    e.preventDefault();
+    const roomTrimmed = (roomInput || "").trim();
+    const userTrimmed = (usernameInput || "").trim();
+    if (!roomTrimmed || !userTrimmed) return;
+    connectToRoom(roomTrimmed, userTrimmed);
+  };
 
   const handleDisconnect = () => {
     disconnectRoom();
@@ -104,46 +106,45 @@ useEffect(() => {
           style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
         >
           <label style={{ fontSize: "0.8rem" }}>
-  Room name
-  <input
-    type="text"
-    value={roomInput}
-    onChange={(e) => setRoomInput(e.target.value)}
-    placeholder="e.g. piano-lab-1"
-    autoFocus
-    style={{
-      width: "100%",
-      marginTop: "0.25rem",
-      padding: "0.35rem 0.5rem",
-      borderRadius: 4,
-      border: "1px solid #555",
-      background: "#111",
-      color: "#fff",
-      fontSize: "0.9rem",
-    }}
-  />
-</label>
+            Room name
+            <input
+              type="text"
+              value={roomInput}
+              onChange={(e) => setRoomInput(e.target.value)}
+              placeholder="e.g. piano-lab-1"
+              autoFocus
+              style={{
+                width: "100%",
+                marginTop: "0.25rem",
+                padding: "0.35rem 0.5rem",
+                borderRadius: 4,
+                border: "1px solid #555",
+                background: "#111",
+                color: "#fff",
+                fontSize: "0.9rem",
+              }}
+            />
+          </label>
 
-<label style={{ fontSize: "0.8rem" }}>
-  Username (required)
-  <input
-    type="text"
-    value={usernameInput}
-    onChange={(e) => setUsernameInput(e.target.value)}
-    placeholder="e.g. Zohar"
-    style={{
-      width: "100%",
-      marginTop: "0.25rem",
-      padding: "0.35rem 0.5rem",
-      borderRadius: 4,
-      border: "1px solid #555",
-      background: "#111",
-      color: "#fff",
-      fontSize: "0.9rem",
-    }}
-  />
-</label>
-
+          <label style={{ fontSize: "0.8rem" }}>
+            Username (required)
+            <input
+              type="text"
+              value={usernameInput}
+              onChange={(e) => setUsernameInput(e.target.value)}
+              placeholder="e.g. Zohar"
+              style={{
+                width: "100%",
+                marginTop: "0.25rem",
+                padding: "0.35rem 0.5rem",
+                borderRadius: 4,
+                border: "1px solid #555",
+                background: "#111",
+                color: "#fff",
+                fontSize: "0.9rem",
+              }}
+            />
+          </label>
 
           <div style={{ fontSize: "0.75rem", opacity: 0.8 }}>
             Status: {statusText}
