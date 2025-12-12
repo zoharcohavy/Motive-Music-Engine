@@ -39,9 +39,9 @@ export default function TopControls({
           style={{
             padding: "0.2rem 0.6rem",
             borderRadius: "4px",
-            border: "1px solid #444",
-            background: roomStatus === "connected" ? "#133" : "#222",
-            color: "#fff",
+            border: "1px solid rgba(163, 255, 232, 0.22)",
+            background: roomStatus === "connected" ? "rgba(59, 183, 168, 0.18)" : "rgba(0,0,0,0.25)",
+            color: "rgba(232, 244, 242, 0.95)",
             cursor: "pointer",
             fontSize: "0.8rem",
           }}
@@ -56,9 +56,9 @@ export default function TopControls({
             style={{
               padding: "0.2rem 0.6rem",
               borderRadius: "4px",
-              border: "1px solid #644",
-              background: isRoomRecording ? "#b22" : "#331111",
-              color: "#fff",
+              border: "1px solid rgba(240, 75, 90, 0.35)",
+              background: isRoomRecording ? "rgba(240, 75, 90, 0.35)" : "rgba(240, 75, 90, 0.12)",
+              color: "rgba(232, 244, 242, 0.95)",
               cursor: "pointer",
               fontSize: "0.8rem",
             }}
@@ -104,9 +104,9 @@ export default function TopControls({
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <label>Waveform:</label>
           <select
+            className="select--compact"
             value={waveform}
             onChange={(e) => setWaveform(e.target.value)}
-            style={{ padding: "0.2rem 0.4rem" }}
           >
             <option value="sine">Sine</option>
             <option value="square">Square</option>
@@ -120,10 +120,11 @@ export default function TopControls({
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
         <label>Effect:</label>
         <select
+          className="select--compact"
           value={effect}
           onChange={(e) => setEffect(e.target.value)}
-          style={{ padding: "0.2rem 0.4rem" }}
         >
+
           <option value="none">No Effect</option>
           <option value="reverb">Reverb</option>
         </select>
