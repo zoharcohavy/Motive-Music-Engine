@@ -3,8 +3,8 @@ import { useInstrumentPageLogic } from "../components/audio/useInstrumentPageLog
 import RecordingsPanel from "../components/audio/RecordingsPanel";
 import TopControls from "../components/audio/TopControls";
 import MouseModeToggle from "../components/audio/MouseModeToggle";
-import TrackSection from "../components/audio/TrackSection";
-import RoomModal from "../components/audio/RoomModal";
+import TrackSection from "../components/Tracks/TrackSection";
+import RoomModal from "../components/Rooms/RoomModal";
 
 import PianoKeyboard from "../components/audio/SoundBoards/PianoKeyboard";
 import DrumMachine from "../components/audio/SoundBoards/DrumMachine";
@@ -46,6 +46,7 @@ export default function InstrumentPage({ instrument }) {
     handleKeyMouseEnter,
 
     roomId,
+    username,
     roomStatus,
     isRoomModalOpen,
     openRoomModal,
@@ -164,6 +165,7 @@ export default function InstrumentPage({ instrument }) {
         onClose={closeRoomModal}
         roomStatus={roomStatus}
         roomId={roomId}
+        username={username}
         connectToRoom={connectToRoom}
         disconnectRoom={disconnectRoom}
       />

@@ -1,7 +1,7 @@
 // useTrackModel.js
 import { useRef, useState, useEffect } from "react";
-import { drawGenericWave } from "./drawUtils";
-import { useTransport } from "./useTransport";
+import { drawGenericWave } from "../audio/drawUtils";
+import { useTransport } from "../audio/useTransport";
 
 /**
  * Track model + drawing + mouse interaction (head + clip drag)
