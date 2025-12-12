@@ -33,6 +33,7 @@ export const DRUM_PADS = [
 
 
 export default function DrumKeyboard({
+  pads = DRUM_PADS,
   activeKeyIds = [],
   onMouseDownKey,
   onMouseEnterKey,
@@ -97,7 +98,7 @@ export default function DrumKeyboard({
             zIndex: 2, // make sure pads are on top of image
           }}
         >
-          {DRUM_PADS.map((pad) => (
+          {pads.map((pad) => (
             <button
               key={pad.id}
               onMouseDown={(e) => {
