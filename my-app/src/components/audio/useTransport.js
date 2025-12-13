@@ -12,7 +12,13 @@ const BASE_STRIP_SECONDS = 10;
  * @param {React.MutableRefObject} params.tracksRef - ref to the latest tracks array
  * @param {Function} params.setTracks - React setState for tracks
  */
-export function useTransport({ tracksRef, setTracks }) {
+export function useTransport({
+  tracksRef,
+  setTracks,
+  getViewStartTime,
+  getHeadTimeSeconds,
+  setHeadTimeSeconds,
+}) {
   const isTransportPlayingRef = useRef(false);
   const transportAnimationFrameRef = useRef(null);
   const transportStartWallTimeRef = useRef(null);
@@ -60,25 +66,15 @@ export function useTransport({ tracksRef, setTracks }) {
     const trackLength = BASE_STRIP_SECONDS / zoomNow;
 
     // Get current head position from the first track (they should all be in sync)
-    const currentHeadPos =
-      tracksNow[0].headPos != null
-        ? tracksNow[0].headPos
-        : tracksNow[0].tapeHeadPos || 0;
+    const currentHeadPos = tracksNow[0].headPos != null ? tracksNow[0].headPos : tracksNow[0].tapeHeadPos || 0;
+    const startHeadTime = typeof getHeadTimeSeconds === "function" ? getHeadTimeSeconds() : trackLength * currentHeadPos;
 
-    const startHeadTime = trackLength * currentHeadPos;
 
     isTransportPlayingRef.current = true;
     transportStartWallTimeRef.current = performance.now();
     transportStartHeadTimeRef.current = startHeadTime;
 
     // Ensure all tracks share the same initial headPos / tapeHeadPos
-    setTracks((prev) =>
-      prev.map((t) => ({
-        ...t,
-        headPos: currentHeadPos,
-        tapeHeadPos: currentHeadPos,
-      }))
-    );
 
     const step = () => {
       if (!isTransportPlayingRef.current) {
@@ -95,6 +91,8 @@ export function useTransport({ tracksRef, setTracks }) {
       const zoomInner = (tracksInner[0] && tracksInner[0].zoom) || 1;
       const trackLengthInner = BASE_STRIP_SECONDS / zoomInner;
 
+
+
       const now = performance.now();
       const elapsed = (now - transportStartWallTimeRef.current) / 1000;
       const startTime = transportStartHeadTimeRef.current;
@@ -109,15 +107,22 @@ export function useTransport({ tracksRef, setTracks }) {
         headTime = 0;
       }
 
-      const newHeadPos =
-        trackLengthInner > 0 ? headTime / trackLengthInner : 0;
+      if (typeof setHeadTimeSeconds === "function") {
+        setHeadTimeSeconds(headTime);
+      }
+
+      const viewStart = typeof getViewStartTime === "function" ? getViewStartTime() : 0;
+
+      const newHeadPos = trackLengthInner > 0 ? (headTime - viewStart) / trackLengthInner : 0;
+      const clampedHeadPos = Math.max(0, Math.min(1, newHeadPos));
 
       // Move the tape head on *all* tracks so UI stays in sync
       setTracks((prev) =>
         prev.map((t) => ({
           ...t,
-          headPos: newHeadPos,
-          tapeHeadPos: newHeadPos,
+          headPos: clampedHeadPos,
+          tapeHeadPos: clampedHeadPos,
+
         }))
       );
 
@@ -195,7 +200,15 @@ export function useTransport({ tracksRef, setTracks }) {
     };
 
     transportAnimationFrameRef.current = requestAnimationFrame(step);
-  }, [tracksRef, setTracks, stopAllTransportAudio]);
+  }, [
+  tracksRef,
+  setTracks,
+  stopAllTransportAudio,
+  getViewStartTime,
+  getHeadTimeSeconds,
+  setHeadTimeSeconds,
+]);
+
 
   // Simple wrapper for UI / Space bar
   const handleGlobalPlay = useCallback(() => {

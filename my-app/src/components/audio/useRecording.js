@@ -16,6 +16,9 @@ export function useRecording({
   setTracks,
   activeRecordingTrackId,
   setActiveRecordingTrackId,
+  setHeadTimeSeconds,
+  getViewStartTime,
+
 } = {}) {
   if (!audioEngine) {
     throw new Error(
@@ -253,6 +256,11 @@ export function useRecording({
           }
 
           const stripTime = headPos * trackLength;
+          const viewStart = typeof getViewStartTime === "function" ? getViewStartTime() : 0;
+          if (typeof setHeadTimeSeconds === "function") {
+            setHeadTimeSeconds(viewStart + stripTime);
+          }
+
           const existingClips = track.clips || [];
           const collided = existingClips.find((c) => {
             const start = c.startTime;

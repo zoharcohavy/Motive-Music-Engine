@@ -13,13 +13,31 @@ const getHeadSecondsForTrack = (track) => {
     track.headPos != null ? track.headPos : track.tapeHeadPos || 0;
   return trackLength * headPos;
 };
+const getTimelineEndSeconds = (tracks) => {
+  const all = tracks || [];
+  let end = 0;
+
+  for (const t of all) {
+    for (const c of t.clips || []) {
+      const clipEnd = (c.startTime || 0) + (c.duration || 0);
+      if (clipEnd > end) end = clipEnd;
+    }
+  }
+
+  return Math.max(end, 0);
+};
+
 
 export default function TrackSection({
   tracks,
+  viewStartTime,
+  setViewStartTime,
+  headTimeSeconds,
   selectedTrackId,
   setSelectedTrackId,
   globalZoom,
   changeZoom,
+
   handleGlobalPlay,
   addTrack,
   deleteTrack,
@@ -33,7 +51,13 @@ export default function TrackSection({
 }) {
   const hasTracks = tracks && tracks.length > 0;
   const firstTrack = hasTracks ? tracks[0] : null;
-  const currentTimeSeconds = firstTrack ? getHeadSecondsForTrack(firstTrack) : 0;
+  const currentTimeSeconds =
+    typeof headTimeSeconds === "number"
+      ? headTimeSeconds
+      : firstTrack
+      ? getHeadSecondsForTrack(firstTrack)
+      : 0;
+
 
   return (
     <div style={{ marginTop: "1.5rem" }}>
@@ -117,6 +141,25 @@ export default function TrackSection({
       +
     </button>
   </div>
+  {/* Global horizontal scroll (pans ALL tracks) */}
+  {typeof viewStartTime === "number" && typeof setViewStartTime === "function" && (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "1rem", flexGrow: 1, minWidth: "180px" }}>
+      <span style={{ fontSize: "0.7rem", color: "#aaa", whiteSpace: "nowrap" }}>
+        Scroll
+      </span>
+
+      <input
+        type="range"
+        min={0}
+        max={Math.max(0, getTimelineEndSeconds(tracks) - BASE_STRIP_SECONDS / (globalZoom || 1))}
+        step={0.01}
+        value={Math.max(0, viewStartTime)}
+        onChange={(e) => setViewStartTime(parseFloat(e.target.value))}
+        style={{ width: "100%", height: "10px", cursor: "pointer" }}
+        aria-label="Scroll timeline"
+      />
+    </div>
+  )}
 
   {/* Time right next to the rest, not all the way on the side */}
   <span
@@ -243,9 +286,9 @@ export default function TrackSection({
                 setSelectedTrackId(track.id);
                 handleTrackStripMouseDown(track.id, e);
               }}
-              onMouseMove={(e) =>
-                handleTrackStripMouseMove(track.id, e)
-              }
+              onMouseMove={(e) => handleTrackStripMouseMove(track.id, e)}
+              onContextMenu={(e) => handleTrackStripContextMenu(track.id, e)}
+
             >
 
 

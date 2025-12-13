@@ -73,6 +73,10 @@ export function useInstrumentPageLogic() {
     setTracks: trackModel.setTracks,
     activeRecordingTrackId: trackModel.activeRecordingTrackId,
     setActiveRecordingTrackId: trackModel.setActiveRecordingTrackId,
+
+    setHeadTimeSeconds: trackModel.setHeadTimeSeconds,
+    getViewStartTime: () => trackModel.viewStartTime,
+    getTrackLength: trackModel.getTrackLength,
   });
   
   // --- Keyboard handlers for the PianoKeyboard component ---
@@ -162,6 +166,10 @@ export function useInstrumentPageLogic() {
 
     // ===== Tracks =====
     tracks: trackModel.tracks,
+    viewStartTime: trackModel.viewStartTime,
+    setViewStartTime: trackModel.setViewStartTime,
+    headTimeSeconds: trackModel.headTimeSeconds,
+
     trackCanvasRefs: trackModel.trackCanvasRefs,
     selectedTrackId: trackModel.selectedTrackId,
     setSelectedTrackId: trackModel.setSelectedTrackId,
