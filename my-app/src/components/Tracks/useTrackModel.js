@@ -35,6 +35,8 @@ export function useTrackModel(options = {}) {
   const BASE_STRIP_SECONDS = 10;
   const [nextTrackId, setNextTrackId] = useState(1);
   const [globalZoom, setGlobalZoom] = useState(1);
+  const [viewStartTime, setViewStartTime] = useState(0); // left edge in seconds
+  const [headTimeSeconds, setHeadTimeSeconds] = useState(0); // absolute playhead time in seconds
   const [activeRecordingTrackId, setActiveRecordingTrackId] = useState(null);
   const [selectedTrackId, setSelectedTrackId] = useState(0);
   const [mouseMode, setMouseMode] = useState("head"); // head | clips | delete
@@ -53,7 +55,14 @@ export function useTrackModel(options = {}) {
     handleGlobalPlay,
     toggleTransportPlay,
     isTransportPlayingRef,
-  } = useTransport({ tracksRef, setTracks });
+  } = useTransport({
+    tracksRef,
+    setTracks,
+    getViewStartTime: () => viewStartTime,
+    getHeadTimeSeconds: () => headTimeSeconds,
+    setHeadTimeSeconds,
+  });
+
 
   // ---------- Helpers ----------
 
@@ -134,37 +143,32 @@ export function useTrackModel(options = {}) {
     });
   };
 
-  // Move a clip horizontally by some fraction (used by older code; still kept)
-  const moveTrackRecording = (trackId, newStartFrac) => {
+  // Move a clip horizontally by absolute time (seconds).
+  const moveTrackRecording = (trackId, newStartTime) => {
     setTracks((prev) =>
       prev.map((track) => {
         if (track.id !== trackId) return track;
-        const trackLength = getTrackLength(track);
-        const newStartTime = trackLength > 0 ? newStartFrac * trackLength : 0;
 
-        if (!track.clips || track.clips.length === 0) {
-          return track;
-        }
+        const nextStartTime = Math.max(
+          0,
+          Number.isFinite(newStartTime) ? newStartTime : 0
+        );
+
+        if (!track.clips || track.clips.length === 0) return track;
 
         const clip = track.clips[0];
-        const candidate = {
-          ...clip,
-          startTime: Math.max(0, newStartTime),
-        };
+        const candidate = { ...clip, startTime: nextStartTime };
 
-        if (willOverlap(track.clips, candidate, clip.id)) {
-          return track;
-        }
+        if (willOverlap(track.clips, candidate, clip.id)) return track;
 
         return {
           ...track,
-          clips: track.clips.map((c) =>
-            c.id === clip.id ? candidate : c
-          ),
+          clips: track.clips.map((c) => (c.id === clip.id ? candidate : c)),
         };
       })
     );
   };
+
 
     // ---------- Mouse interaction on track strips ----------
 
@@ -177,8 +181,9 @@ export function useTrackModel(options = {}) {
     const track = tracksNow.find((t) => t.id === trackId);
     if (!track) return;
 
-    const trackLength = getTrackLength(track);
-    const clickTime = trackLength > 0 ? frac * trackLength : 0;
+    const visibleSeconds = getTrackLength(track);
+    const clickTime = visibleSeconds > 0 ? viewStartTime + frac * visibleSeconds : viewStartTime;
+
     const clips = track.clips || [];
 
     // --- DELETE MODE: delete a single clip under the cursor ---
@@ -234,7 +239,13 @@ export function useTrackModel(options = {}) {
 
     // --- HEAD MODE (default): move the tape head ---
     draggingHeadTrackIdRef.current = trackId;
-    syncHeadPosAllTracks(frac);
+    const nextHeadTime = clickTime;
+    setHeadTimeSeconds(nextHeadTime);
+
+    // Keep the stored headPos in tracks in sync with the viewport
+    const pos = visibleSeconds > 0 ? (nextHeadTime - viewStartTime) / visibleSeconds : 0;
+    syncHeadPosAllTracks(Math.max(0, Math.min(1, pos)));
+
   };
 
 
@@ -255,8 +266,8 @@ export function useTrackModel(options = {}) {
           prev.map((track) => {
             if (track.id !== fromTrackId) return track;
 
-            const trackLength = getTrackLength(track);
-            const clickTime = trackLength > 0 ? frac * trackLength : 0;
+            const visibleSeconds = getTrackLength(track);
+            const clickTime = visibleSeconds > 0 ? viewStartTime + frac * visibleSeconds : viewStartTime;
 
             const newStartTime = Math.max(0, clickTime - offsetTime);
             const clips = track.clips || [];
@@ -306,8 +317,9 @@ export function useTrackModel(options = {}) {
         if (!movingClip) return prev;
 
         // Use the destination track's length to compute new time
-        const destLength = getTrackLength(toTrack);
-        const clickTime = destLength > 0 ? frac * destLength : 0;
+        const visibleSeconds = getTrackLength(toTrack);
+        const clickTime = visibleSeconds > 0 ? viewStartTime + frac * visibleSeconds : viewStartTime;
+
         const newStartTime = Math.max(0, clickTime - offsetTime);
 
         const candidate = {
@@ -341,7 +353,18 @@ export function useTrackModel(options = {}) {
 
     // --- TAPE HEAD DRAGGING ---
     if (mouseMode === "head" && draggingHeadTrackIdRef.current === trackId) {
-      syncHeadPosAllTracks(frac);
+      const tracksNow = tracksRef.current || [];
+      const track = tracksNow.find((t) => t.id === trackId);
+      if (!track) return;
+
+      const visibleSeconds = getTrackLength(track);
+      const nextHeadTime = visibleSeconds > 0 ? viewStartTime + frac * visibleSeconds : viewStartTime;
+
+      setHeadTimeSeconds(nextHeadTime);
+
+      const pos = visibleSeconds > 0 ? (nextHeadTime - viewStartTime) / visibleSeconds : 0;
+      syncHeadPosAllTracks(Math.max(0, Math.min(1, pos)));
+
     }
   };
 
@@ -362,8 +385,9 @@ export function useTrackModel(options = {}) {
     const track = tracksNow.find((t) => t.id === trackId);
     if (!track) return;
 
-    const trackLength = getTrackLength(track);
-    const clickTime = trackLength > 0 ? frac * trackLength : 0;
+    const visibleSeconds = getTrackLength(track);
+    const clickTime = visibleSeconds > 0 ? viewStartTime + frac * visibleSeconds : viewStartTime;
+
     const clips = track.clips || [];
 
     // Find the clip under the mouse at this time
@@ -465,13 +489,20 @@ if (track.clips && track.clips.length > 0) {
   const trackLength = getTrackLength(track);
 
   track.clips.forEach((clip) => {
+    const visibleSeconds = getTrackLength(track);
+
+    // Where the clip starts inside the current viewport (0..1 can go negative / >1)
     const startFrac =
-      trackLength > 0 ? clip.startTime / trackLength : 0;
+      visibleSeconds > 0 ? (clip.startTime - viewStartTime) / visibleSeconds : 0;
+
     const durFrac =
-      trackLength > 0 ? clip.duration / trackLength : 0;
+      visibleSeconds > 0 ? clip.duration / visibleSeconds : 0;
 
     const startX = startFrac * width;
     const clipWidth = Math.max(4, durFrac * width);
+
+    // Skip drawing if fully off-screen
+    if (startX + clipWidth < 0 || startX > width) return;
 
     const x = startX;
     const y = 4;
@@ -523,11 +554,12 @@ if (track.clips && track.clips.length > 0) {
 
 
       // Draw tape-head
-      const headPos =
-        track.headPos != null
-          ? track.headPos
-          : track.tapeHeadPos || 0;
-      const headX = headPos * width;
+      const visibleSeconds = getTrackLength(track);
+      const headPos = visibleSeconds > 0 ? (headTimeSeconds - viewStartTime) / visibleSeconds : 0;
+
+      const clampedHeadPos = Math.max(0, Math.min(1, headPos));
+      const headX = clampedHeadPos * width;
+
 
       // subtle fill before the head
       ctx.fillStyle = "rgba(255,255,255,0.04)";
@@ -541,7 +573,8 @@ if (track.clips && track.clips.length > 0) {
       ctx.lineTo(headX, height);
       ctx.stroke();
     });
-  }, [tracks, BASE_STRIP_SECONDS]);
+    }, [tracks, viewStartTime, headTimeSeconds, globalZoom]);
+
 
   // ---------- Return API ----------
   return {
@@ -550,6 +583,11 @@ if (track.clips && track.clips.length > 0) {
     setTracks,
     nextTrackId,
     setNextTrackId,
+    viewStartTime,
+    setViewStartTime,
+    headTimeSeconds,
+    setHeadTimeSeconds,
+
     globalZoom,
     setGlobalZoom,
     activeRecordingTrackId,

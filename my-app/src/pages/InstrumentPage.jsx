@@ -29,6 +29,10 @@ export default function InstrumentPage({ instrument }) {
     setMouseMode,
 
     tracks,
+    viewStartTime,
+    setViewStartTime,
+    headTimeSeconds,
+
     selectedTrackId,
     setSelectedTrackId,
     globalZoom,
@@ -148,6 +152,10 @@ export default function InstrumentPage({ instrument }) {
       {/* Tracks */}
       <TrackSection
         tracks={tracks}
+        viewStartTime={viewStartTime}
+        setViewStartTime={setViewStartTime}
+        headTimeSeconds={headTimeSeconds}
+
         selectedTrackId={selectedTrackId}
         setSelectedTrackId={setSelectedTrackId}
         globalZoom={globalZoom}
