@@ -169,12 +169,9 @@ export default function TrackSection({
         value={Math.max(0, viewStartTime)}
         onChange={(e) => {
           const v = parseFloat(e.target.value);
-          if (typeof setViewStartTimeAndSnapHead === "function") {
-            setViewStartTimeAndSnapHead(v);
-          } else {
-            setViewStartTime(v);
-          }
+          setViewStartTime(v); // scroll only; do NOT move the tapehead
         }}
+
         style={{ width: "100%", height: "10px", cursor: "pointer" }}
         aria-label="Scroll timeline"
       />
