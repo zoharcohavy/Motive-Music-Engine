@@ -105,6 +105,23 @@ code {
 }
 
 .notice__body { margin-top: 10px; }
+/* Mini variant: keep the toggle small + left-aligned so it doesn't consume full width when collapsed */
+.notice--mini .notice__header {
+  width: clamp(150px, 12vw, 220px); /* ~10–13% of the page on desktop */
+  justify-content: flex-start;
+
+  /* More minimal than the default notice styling */
+  border-color: rgba(163, 255, 232, 0.18);
+  background: rgba(0, 0, 0, 0.18);
+  font-size: 0.82rem;
+  padding: 5px 8px;
+}
+
+.notice--mini .notice__subtitle,
+.notice--mini .notice__hint {
+  display: none;
+}
+
 
 /* Form controls */
 button, select, input {

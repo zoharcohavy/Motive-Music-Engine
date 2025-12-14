@@ -1,8 +1,8 @@
 import { useRef } from "react";
-import { useAudioEngine } from "./useAudioEngine";
+import { useAudioEngine } from "./Engines/useAudioEngine";
 import { useRoom } from "../Rooms/useRoom";
 import { useTrackModel } from "../Tracks/useTrackModel";
-import { useRecording } from "./useRecording";
+import { useRecording } from "./Engines/useRecording";
 
 
 
@@ -75,7 +75,9 @@ export function useInstrumentPageLogic() {
     setActiveRecordingTrackId: trackModel.setActiveRecordingTrackId,
 
     setHeadTimeSeconds: trackModel.setHeadTimeSeconds,
+    getHeadTimeSeconds: () => trackModel.headTimeSeconds,
     getViewStartTime: () => trackModel.viewStartTime,
+    setViewStartTime: trackModel.setViewStartTime,
     getTrackLength: trackModel.getTrackLength,
   });
   
@@ -168,6 +170,7 @@ export function useInstrumentPageLogic() {
     tracks: trackModel.tracks,
     viewStartTime: trackModel.viewStartTime,
     setViewStartTime: trackModel.setViewStartTime,
+    setViewStartTimeAndSnapHead: trackModel.setViewStartTimeAndSnapHead,
     headTimeSeconds: trackModel.headTimeSeconds,
 
     trackCanvasRefs: trackModel.trackCanvasRefs,

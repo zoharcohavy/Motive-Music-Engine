@@ -1,6 +1,7 @@
 import React from "react";
 
 const BASE_STRIP_SECONDS = 10;
+const MIN_TIMELINE_SECONDS = 120; // 2 minutes: makes Scroll usable on page load
 
 const getTrackLengthForTrack = (track) => {
   const zoom = track.zoom || 1;
@@ -13,6 +14,7 @@ const getHeadSecondsForTrack = (track) => {
     track.headPos != null ? track.headPos : track.tapeHeadPos || 0;
   return trackLength * headPos;
 };
+
 const getTimelineEndSeconds = (tracks) => {
   const all = tracks || [];
   let end = 0;
@@ -24,14 +26,25 @@ const getTimelineEndSeconds = (tracks) => {
     }
   }
 
-  return Math.max(end, 0);
+  // If there are no clips yet, keep the timeline at a sensible default so the
+  // user can scroll immediately (without needing to record first).
+  return Math.max(end, MIN_TIMELINE_SECONDS, 0);
 };
+
+const formatTimeMMSS = (seconds) => {
+  const s = Math.max(0, Number(seconds) || 0);
+  const m = Math.floor(s / 60);
+  const r = Math.floor(s % 60);
+  return `${m}:${String(r).padStart(2, "0")}`;
+};
+
 
 
 export default function TrackSection({
   tracks,
   viewStartTime,
   setViewStartTime,
+  setViewStartTimeAndSnapHead,
   headTimeSeconds,
   selectedTrackId,
   setSelectedTrackId,
@@ -154,7 +167,14 @@ export default function TrackSection({
         max={Math.max(0, getTimelineEndSeconds(tracks) - BASE_STRIP_SECONDS / (globalZoom || 1))}
         step={0.01}
         value={Math.max(0, viewStartTime)}
-        onChange={(e) => setViewStartTime(parseFloat(e.target.value))}
+        onChange={(e) => {
+          const v = parseFloat(e.target.value);
+          if (typeof setViewStartTimeAndSnapHead === "function") {
+            setViewStartTimeAndSnapHead(v);
+          } else {
+            setViewStartTime(v);
+          }
+        }}
         style={{ width: "100%", height: "10px", cursor: "pointer" }}
         aria-label="Scroll timeline"
       />
@@ -170,7 +190,7 @@ export default function TrackSection({
       minWidth: "3.5rem",
     }}
   >
-    {hasTracks ? `${currentTimeSeconds.toFixed(2)}s` : "0.00s"}
+    {formatTimeMMSS(hasTracks ? currentTimeSeconds : 0)}
   </span>
 </div>
 
