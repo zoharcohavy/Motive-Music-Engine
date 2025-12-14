@@ -164,7 +164,7 @@ export function useInstrumentPageLogic() {
     handleTrackStripMouseDown: trackModel.handleTrackStripMouseDown,
     handleTrackStripMouseMove: trackModel.handleTrackStripMouseMove,
     handleTrackStripContextMenu: trackModel.handleTrackStripContextMenu,
-    moveTrackRecording: trackModel.moveTrackRecording,
+    moveClip: trackModel.moveClip,
 
     // ===== Tracks =====
     tracks: trackModel.tracks,

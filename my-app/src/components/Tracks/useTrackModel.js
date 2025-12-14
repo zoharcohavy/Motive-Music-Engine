@@ -153,7 +153,7 @@ export function useTrackModel(options = {}) {
   };
 
   // Move a clip horizontally by absolute time (seconds).
-  const moveTrackRecording = (trackId, newStartTime) => {
+  const moveClip = (trackId, newStartTime) => {
     setTracks((prev) =>
       prev.map((track) => {
         if (track.id !== trackId) return track;
@@ -623,7 +623,7 @@ if (track.clips && track.clips.length > 0) {
     addTrack,
     deleteTrack,
     changeZoom,
-    moveTrackRecording,
+    moveClip,
     handleTrackStripMouseDown,
     handleTrackStripMouseMove,
     handleTrackStripContextMenu,
