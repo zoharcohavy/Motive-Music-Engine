@@ -566,21 +566,24 @@ if (track.clips && track.clips.length > 0) {
       const visibleSeconds = getTrackLength(track);
       const headPos = visibleSeconds > 0 ? (headTimeSeconds - viewStartTime) / visibleSeconds : 0;
 
-      const clampedHeadPos = Math.max(0, Math.min(1, headPos));
-      const headX = clampedHeadPos * width;
+      // ✅ If the head is outside the current window, don't clamp it to 0/1.
+      // Just don't draw it (so it doesn't "jump to the beginning").
+      if (headPos >= 0 && headPos <= 1) {
+        const headX = headPos * width;
 
+        // subtle fill before the head
+        ctx.fillStyle = "rgba(255,255,255,0.04)";
+        ctx.fillRect(0, 0, headX, height);
 
-      // subtle fill before the head
-      ctx.fillStyle = "rgba(255,255,255,0.04)";
-      ctx.fillRect(0, 0, headX, height);
+        // yellow head line
+        ctx.strokeStyle = "#ffff00";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(headX, 0);
+        ctx.lineTo(headX, height);
+        ctx.stroke();
+      }
 
-      // yellow head line
-      ctx.strokeStyle = "#ffff00";
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(headX, 0);
-      ctx.lineTo(headX, height);
-      ctx.stroke();
     });
     }, [tracks, viewStartTime, headTimeSeconds, globalZoom]);
 

@@ -158,7 +158,6 @@ export default function InstrumentPage({ instrument }) {
         tracks={tracks}
         viewStartTime={viewStartTime}
         setViewStartTime={setViewStartTime}
-        setViewStartTimeAndSnapHead={setViewStartTimeAndSnapHead}
         headTimeSeconds={headTimeSeconds}
         selectedTrackId={selectedTrackId}
         setSelectedTrackId={setSelectedTrackId}
