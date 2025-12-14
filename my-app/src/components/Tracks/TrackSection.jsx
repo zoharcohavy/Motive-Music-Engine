@@ -70,101 +70,112 @@ export default function TrackSection({
       : firstTrack
       ? getHeadSecondsForTrack(firstTrack)
       : 0;
+  // If the playhead is offscreen, jump the viewport so the head is visible.
+  // Place it slightly to the right of the left edge.
+  const revealHeadIfOffscreen = () => {
+    if (!hasTracks) return;
+    if (typeof setViewStartTime !== "function") return;
+
+    // visible window size
+    const zoom = globalZoom || (firstTrack?.zoom || 1);
+    const visibleSeconds = BASE_STRIP_SECONDS / (zoom || 1);
+
+    // ✅ Use ABSOLUTE head time (this is the important fix)
+    const head = Number.isFinite(headTimeSeconds) ? headTimeSeconds : 0;
+
+    const viewStart = Number.isFinite(viewStartTime) ? viewStartTime : 0;
+    const viewEnd = viewStart + visibleSeconds;
+
+    // If head is already visible, do nothing
+    if (head >= viewStart && head <= viewEnd) return;
+
+    // Put head slightly to the right of the left edge
+    const padding = visibleSeconds * 0.12;
+    const nextStart = Math.max(0, head - padding);
+
+    // ✅ One-shot jump (not incremental)
+    setViewStartTime(nextStart);
+  };
+  const revealThen = (fn) => {
+    revealHeadIfOffscreen();
+    // Let React apply the viewStartTime update before starting transport/recording.
+    window.requestAnimationFrame(() => fn());
+  };
+
+
+const zoom = globalZoom || (firstTrack?.zoom || 1);
+const visibleSeconds = BASE_STRIP_SECONDS / (zoom || 1);
+
+// percent across the visible window (0..1)
+const head = Number.isFinite(headTimeSeconds) ? headTimeSeconds : 0;
+const start = Number.isFinite(viewStartTime) ? viewStartTime : 0;
+const frac = visibleSeconds > 0 ? (head - start) / visibleSeconds : 0;
+
+// allow it to go slightly offscreen without exploding layout
+const clamped = Math.max(-0.1, Math.min(1.1, frac));
+const headLeftPercent = clamped * 100;
 
 
   return (
-    <div style={{ marginTop: "1.5rem" }}>
+    <div className="trackSection">
       {/* Transport / zoom row */}
-      <div
-  style={{
-    display: "flex",
-    alignItems: "center",
-    gap: "0.75rem",
-    marginBottom: "0.75rem",
-  }}
->
+    <div className="trackSection__transportRow">
+
   <button
-    type="button"
-    onClick={handleGlobalPlay}
-    style={{
-      padding: "0.3rem 0.8rem",
-      borderRadius: "4px",
-      border: "1px solid #444",
-      background: "#222",
-      color: "#fff",
-      cursor: "pointer",
-    }}
+    className="btn btn-primary"
+    onClick={() => revealThen(handleGlobalPlay)}
   >
     ▶ Play
   </button>
 
-  <button
-    type="button"
-    onClick={addTrack}
-    style={{
-      padding: "0.3rem 0.8rem",
-      borderRadius: "4px",
-      border: "1px solid #444",
-      background: "#222",
-      color: "#fff",
-      cursor: "pointer",
-    }}
-  >
+<button className="btn" onClick={addTrack}>
     + Track
   </button>
 
-  <div
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: "0.35rem",
-      marginLeft: "1rem",
-    }}
-  >
-    <span style={{ fontSize: "0.7rem", color: "#aaa" }}>Zoom</span>
+  <div className="trackSection__zoomGroup">
+
+    <span className="trackSection__hint">Zoom</span>
     <button
       type="button"
+      className="btn trackSection__zoomBtn"
       onClick={() => changeZoom(-0.25)}
-      style={{
-        padding: "0.1rem 0.4rem",
-        borderRadius: "3px",
-        border: "1px solid #444",
-        background: "#222",
-        color: "#fff",
-        cursor: "pointer",
-      }}
     >
       -
     </button>
-    <span style={{ fontSize: "0.75rem", minWidth: "3ch" }}>
+
+    <span className="trackSection__zoomValue">
       {globalZoom?.toFixed ? globalZoom.toFixed(2) : globalZoom}
     </span>
     <button
       type="button"
+      className="btn trackSection__zoomBtn"
       onClick={() => changeZoom(0.25)}
-      style={{
-        padding: "0.1rem 0.4rem",
-        borderRadius: "3px",
-        border: "1px solid #444",
-        background: "#222",
-        color: "#fff",
-        cursor: "pointer",
-      }}
     >
       +
     </button>
+
   </div>
   {/* Global horizontal scroll (pans ALL tracks) */}
   {typeof viewStartTime === "number" && typeof setViewStartTime === "function" && (
-    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginLeft: "1rem", flexGrow: 1, minWidth: "180px" }}>
-      <span style={{ fontSize: "0.7rem", color: "#aaa", whiteSpace: "nowrap" }}>
-        Scroll
-      </span>
+    <div className="trackSection__scrollRow">
+      <span className="trackSection__hint">Scroll</span>
+
 
       <input
         type="range"
         min={0}
-        max={Math.max(0, getTimelineEndSeconds(tracks) - BASE_STRIP_SECONDS / (globalZoom || 1))}
+        max={(() => {
+          const zoom = globalZoom || 1;
+          const visibleSeconds = BASE_STRIP_SECONDS / zoom;
+
+          const baseEnd = getTimelineEndSeconds(tracks);
+
+          // ✅ make sure scroll range includes where the tapehead currently is
+          const head = Number.isFinite(headTimeSeconds) ? headTimeSeconds : 0;
+          const effectiveEnd = Math.max(baseEnd, head + visibleSeconds);
+
+          return Math.max(0, effectiveEnd - visibleSeconds);
+        })()}
         step={0.01}
         value={Math.max(0, viewStartTime)}
         onChange={(e) => {
@@ -172,109 +183,55 @@ export default function TrackSection({
           setViewStartTime(v); // scroll only; do NOT move the tapehead
         }}
 
-        style={{ width: "100%", height: "10px", cursor: "pointer" }}
+        className="trackSection__scrollSlider"
         aria-label="Scroll timeline"
       />
     </div>
   )}
 
   {/* Time right next to the rest, not all the way on the side */}
-  <span
-    style={{
-      fontSize: "0.75rem",
-      color: "#aaa",
-      marginLeft: "0.75rem",
-      minWidth: "3.5rem",
-    }}
-  >
+  <span className="trackSection__time">
     {formatTimeMMSS(hasTracks ? currentTimeSeconds : 0)}
   </span>
 </div>
 
 
       {/* Tracks with a single global tape-head line over them */}
-      <div
-        style={{
-          position: "relative",
-          borderRadius: "6px",
-          background: "#080808",
-          padding: "0.5rem 0.75rem",
-        }}
-      >
+      <div className="trackSection__tracksWrap">
         {/* Global tape head: one vertical line across all tracks */}
-       
-
         {tracks.map((track) => (
           <div
             key={track.id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              padding: "0.3rem 0 0.3rem 0",
-              borderTop: "1px solid #222",
-              background:
-        activeRecordingTrackId === track.id ? "#221111" : "transparent",
-            }}
+            className={`trackSection__trackRow ${
+              activeRecordingTrackId === track.id ? "trackSection__trackRow--recording" : ""
+            }`}
           >
+
             {/* Left: track controls */}
-            <div
-              style={{
-                width: "90px",
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.2rem",
-              }}
-            >
+            <div className="trackSection__leftCol">
             <button
               type="button"
               onClick={() => setSelectedTrackId(track.id)}
-              style={{
-                padding: "0.2rem 0.4rem",
-                fontSize: "0.7rem",
-                borderRadius: "4px",
-                border:
-                  track.id === selectedTrackId
-                    ? "1px solid #fff"
-                    : "1px solid #555",
-                background:
-                  track.id === selectedTrackId ? "#333" : "#191919",
-                color: "#fff",
-                cursor: "pointer",
-                textAlign: "left",
-              }}
+              className={`btn trackSection__trackBtn ${
+                track.id === selectedTrackId ? "trackSection__trackBtn--selected" : ""
+              }`}
             >
               Track {track.id + 1}
             </button>
-
-
-
               <button
                 type="button"
-                onClick={() => handleTrackRecordToggle(track.id)}
-                style={{
-                padding: "0.15rem 0.4rem",
-                fontSize: "0.65rem",
-                borderRadius: "999px",
-                border: "none",
-                background:
-                activeRecordingTrackId === track.id ? "#d33" : "#553",
-                color: "#fff",
-                cursor: "pointer",
-                alignSelf: "flex-start",
-                }}
+                onClick={() => revealThen(() => handleTrackRecordToggle(track.id))}
+                className={`btn trackSection__recBtn ${
+                  activeRecordingTrackId === track.id ? "trackSection__recBtn--active" : ""
+                }`}
               >
-              Rec
+                Rec
               </button>
 
 
-              <span
-                style={{
-                  fontSize: "0.65rem",
-                  color: "#999",
-                  flexShrink: 0,
-                }}
-              >
+
+              <span className="trackSection__recTime">
+
                 {track.recordingDuration
                   ? `${track.recordingDuration.toFixed(1)}s`
                   : ""}
@@ -282,33 +239,7 @@ export default function TrackSection({
             </div>
 
             {/* Right: strip canvas for this track */}
-            <div
-              style={{
-                flexGrow: 1,
-                background: "#141414",
-                borderRadius: "4px",
-                overflow: "hidden",
-                cursor:
-                  mouseMode === "delete"
-                    ? "pointer"
-                    : mouseMode === "head"
-                    ? "pointer"
-                    : "grab",
-              }}
-              onMouseDown={(e) => {
-                // Always select the track, then let the model decide:
-                //  - head mode -> move tape head
-                //  - clip mode -> start dragging a clip
-                //  - delete mode -> delete the clip under the cursor
-                setSelectedTrackId(track.id);
-                handleTrackStripMouseDown(track.id, e);
-              }}
-              onMouseMove={(e) => handleTrackStripMouseMove(track.id, e)}
-              onContextMenu={(e) => handleTrackStripContextMenu(track.id, e)}
-
-            >
-
-
+            <div className="trackSection__strip">
 
               <canvas
                 ref={(el) => {
@@ -319,11 +250,12 @@ export default function TrackSection({
                 }}
                 width={800}
                 height={40}
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  display: "block",
-                }}
+                className="trackSection__canvas"
+                onMouseDown={(e) => handleTrackStripMouseDown?.(track.id, e)}
+                onMouseMove={(e) => handleTrackStripMouseMove?.(track.id, e)}
+                onContextMenu={(e) => handleTrackStripContextMenu?.(track.id, e)}
+
+
               />
             </div>
           </div>

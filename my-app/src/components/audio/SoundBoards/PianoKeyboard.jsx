@@ -47,25 +47,12 @@ export default function PianoKeyboard({
 
   return (
     <div
-      style={{
-        position: "fixed",
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: "90px",
-        overflowX: "hidden",
-        background: "#ddd",
-      }}
+      className="pianoKb"
       onMouseUp={() => setIsMouseDown(false)}
       onMouseLeave={() => setIsMouseDown(false)}
     >
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          height: "100%",
-        }}
-      >
+
+      <div className="pianoKb__inner">
         {/* White keys */}
         {whiteKeys.map((key) => (
           <button
@@ -80,33 +67,16 @@ export default function PianoKeyboard({
                 onMouseEnterKey(key);
               }
             }}
+            className={`pianoKb__white ${isActive(key.id) ? "isActive" : ""}`}
             style={{
-              position: "absolute",
               left: `calc((100vw / ${totalWhites}) * ${key.whiteIndex})`,
               width: `calc(100vw / ${totalWhites})`,
-              height: "100%",
-              borderTop: "1px solid #333",
-              borderBottom: "1px solid #333",
               borderLeft: key.whiteIndex === 0 ? "1px solid #333" : "0",
-              borderRight: "1px solid #333",
-              background: isActive(key.id) ? "#eee" : "white",
-              boxSizing: "border-box",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "flex-end",
-              alignItems: "center",
-              paddingBottom: "0.15rem",
-              cursor: "pointer",
-              userSelect: "none",
-              fontSize: "0.5rem",
-              overflow: "hidden",
-              whiteSpace: "nowrap",
-              zIndex: 1,
-              opacity: isActive(key.id) ? 0.7 : 1,
             }}
           >
             {key.name.replace("#", "")}
           </button>
+
         ))}
 
         {/* Black keys */}
@@ -123,33 +93,16 @@ export default function PianoKeyboard({
                 onMouseEnterKey(key);
               }
             }}
+            className={`pianoKb__black ${isActive(key.id) ? "isActive" : ""}`}
             style={{
-              position: "absolute",
               left: `calc((100vw / ${key.totalWhite}) * ${key.offset})`,
               width: `calc(100vw / ${key.totalWhite})`,
               transform: "scaleX(0.6)",
-              height: "60%",
-              top: 0,
-              border: "1px solid #222",
-              background: isActive(key.id) ? "#333" : "black",
-              color: "white",
-              boxSizing: "border-box",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "flex-end",
-              alignItems: "center",
-              paddingBottom: "0.15rem",
-              cursor: "pointer",
-              userSelect: "none",
-              fontSize: "0.45rem",
-              overflow: "hidden",
-              whiteSpace: "nowrap",
-              zIndex: 2,
-              opacity: isActive(key.id) ? 0.7 : 1,
             }}
           >
             {key.name}
           </button>
+
         ))}
       </div>
     </div>

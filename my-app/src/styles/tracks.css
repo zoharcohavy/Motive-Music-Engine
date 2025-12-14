@@ -1,0 +1,195 @@
+/* =========================
+   TrackSection layout
+   ========================= */
+
+.trackSection {
+  margin-top: 1.5rem;
+}
+
+.trackSection__transportRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.trackSection__hint {
+  font-size: 0.7rem;
+  color: #aaa;
+  white-space: nowrap;
+}
+
+.trackSection__time {
+  font-size: 0.75rem;
+  color: #aaa;
+  margin-left: 0.75rem;
+  min-width: 3.5rem;
+}
+
+/* =========================
+   Zoom controls (carbon copy)
+   ========================= */
+
+.trackSection__zoomGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: 1rem;
+}
+
+.trackSection__zoomBtn {
+  padding: 0.1rem 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1;
+  border-radius: 3px;
+
+  background: #222;
+  border: 1px solid #444;
+  color: #fff;
+
+  cursor: pointer;
+}
+
+/* Kill shared .btn hover/active effects so it matches old inline style */
+.trackSection__zoomBtn:hover {
+  background: #222;
+}
+
+.trackSection__zoomBtn:active {
+  transform: none;
+}
+
+.trackSection__zoomValue {
+  font-size: 0.75rem;
+  min-width: 3ch;
+  text-align: center;
+}
+
+/* =========================
+   Scroll row
+   ========================= */
+
+.trackSection__scrollRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: 1rem;
+  flex-grow: 1;
+  min-width: 180px;
+}
+
+.trackSection__scrollSlider {
+  width: 100%;
+  height: 10px;
+  cursor: pointer;
+}
+
+/* =========================
+   Tracks area
+   ========================= */
+
+.trackSection__tracksWrap {
+  position: relative;
+  border-radius: 6px;
+  background: #080808;
+  padding: 0.5rem 0.75rem;
+}
+
+.trackSection__trackRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0;
+  border-top: 1px solid #222;
+  background: transparent;
+}
+
+.trackSection__trackRow--recording {
+  background: #221111;
+}
+
+/* Left column */
+.trackSection__leftCol {
+  width: 90px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+/* Track select button (carbon copy) */
+.trackSection__trackBtn {
+  padding: 0.2rem 0.4rem;
+  font-size: 0.7rem;
+  border-radius: 4px;
+
+  background: #191919;
+  border: 1px solid #555;
+  color: #fff;
+
+  cursor: pointer;
+  text-align: left;
+}
+
+/* prevent global button hover changes */
+.trackSection__trackBtn:hover {
+  background: #191919;
+}
+
+.trackSection__trackBtn--selected {
+  background: #333;
+  border: 1px solid #fff;
+}
+
+.trackSection__trackBtn--selected:hover {
+  background: #333;
+}
+
+/* Rec button (carbon copy, tiny pill) */
+.trackSection__recBtn {
+  padding: 0.15rem 0.4rem;
+  font-size: 0.65rem;
+  border-radius: 999px;
+
+  background: #553;
+  border: none;
+  color: #fff;
+
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.trackSection__recBtn--active {
+  background: #d33;
+}
+
+/* prevent global button hover/active changes */
+.trackSection__recBtn:hover {
+  background: #553;
+}
+
+.trackSection__recBtn--active:hover {
+  background: #d33;
+}
+
+.trackSection__recBtn:active {
+  transform: none;
+}
+
+.trackSection__recTime {
+  font-size: 0.65rem;
+  color: #999;
+  flex-shrink: 0;
+}
+
+/* Strip + canvas */
+.trackSection__strip {
+  flex-grow: 1;
+  background: #141414;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.trackSection__canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
