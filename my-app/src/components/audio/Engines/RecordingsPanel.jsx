@@ -1,5 +1,5 @@
 import React from "react";
-import { API_BASE } from "../../components/audio/constants";
+import { API_BASE } from "../constants";
 
 export default function RecordingsPanel({ recordings, recordingsError }) {
   return (

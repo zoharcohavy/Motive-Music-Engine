@@ -1,7 +1,7 @@
 // src/components/audio/useDrumPadConfig.js
 import { useMemo } from "react";
-import { usePersistedState } from "./usePersistedState";
-import { DRUM_PADS } from "./SoundBoards/DrumMachine";
+import { usePersistedState } from "../../ui/usePersistedState";
+import { DRUM_PADS } from "../SoundBoards/DrumMachine";
 
 /**
  * Foundation for:

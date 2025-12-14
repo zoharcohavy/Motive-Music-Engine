@@ -1,7 +1,7 @@
 // useTrackModel.js
 import { useRef, useState, useEffect } from "react";
 import { drawGenericWave } from "../audio/drawUtils";
-import { useTransport } from "../audio/useTransport";
+import { useTransport } from "./useTransport";
 
 /**
  * Track model + drawing + mouse interaction (head + clip drag)
@@ -59,6 +59,7 @@ export function useTrackModel(options = {}) {
     tracksRef,
     setTracks,
     getViewStartTime: () => viewStartTime,
+    setViewStartTime,
     getHeadTimeSeconds: () => headTimeSeconds,
     setHeadTimeSeconds,
   });
@@ -95,6 +96,14 @@ export function useTrackModel(options = {}) {
           track.tapeHeadPos != null ? headPos : track.tapeHeadPos,
       }))
     );
+  };
+  // When the user scrolls the viewport, it should feel like we're moving "where the tape head is" too.
+  // This makes Record/Play start from the scrolled-to position without requiring an extra click.
+  const setViewStartTimeAndSnapHead = (nextStart) => {
+    const v = Number.isFinite(nextStart) ? nextStart : 0;
+    setViewStartTime(v);
+    setHeadTimeSeconds(v);
+    syncHeadPosAllTracks(0); // snap playhead to left edge of the visible window
   };
 
   // ---------- Public actions ----------
@@ -585,6 +594,7 @@ if (track.clips && track.clips.length > 0) {
     setNextTrackId,
     viewStartTime,
     setViewStartTime,
+    setViewStartTimeAndSnapHead,
     headTimeSeconds,
     setHeadTimeSeconds,
 

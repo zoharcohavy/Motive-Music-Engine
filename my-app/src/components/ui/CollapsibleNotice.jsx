@@ -9,10 +9,11 @@ export default function CollapsibleNotice({
   subtitle,
   isOpen,
   setIsOpen,
+  className = "",
   children,
 }) {
   return (
-    <section className="notice" aria-label={title}>
+    <section className={`notice ${className}`.trim()} aria-label={title}>
       <button
         type="button"
         className="notice__header"

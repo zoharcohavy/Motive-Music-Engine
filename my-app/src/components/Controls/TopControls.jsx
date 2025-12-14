@@ -6,6 +6,7 @@ export default function TopControls({
   setWaveform,
   effect,
   setEffect,
+  showWaveform = true,
   roomId,
   roomStatus,
   openRoomModal,
@@ -92,29 +93,32 @@ export default function TopControls({
       <div style={{ flex: 1 }} />
     </div>
 
-      {/* Waveform selector */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.75rem",
-          flexWrap: "wrap",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <label>Waveform:</label>
-          <select
-            className="select--compact"
-            value={waveform}
-            onChange={(e) => setWaveform(e.target.value)}
-          >
-            <option value="sine">Sine</option>
-            <option value="square">Square</option>
-            <option value="sawtooth">Sawtooth</option>
-            <option value="triangle">Triangle</option>
-          </select>
+      {/* Waveform selector (piano only) */}
+      {showWaveform && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <label>Waveform:</label>
+            <select
+              className="select--compact"
+              value={waveform}
+              onChange={(e) => setWaveform(e.target.value)}
+            >
+              <option value="sine">Sine</option>
+              <option value="square">Square</option>
+              <option value="sawtooth">Sawtooth</option>
+              <option value="triangle">Triangle</option>
+            </select>
+          </div>
         </div>
-      </div>
+      )}
+
 
       {/* Effect selector */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>

@@ -1,8 +1,8 @@
 import React from "react";
 import { useInstrumentPageLogic } from "../components/audio/useInstrumentPageLogic";
-import RecordingsPanel from "../components/audio/RecordingsPanel";
-import TopControls from "../components/audio/TopControls";
-import MouseModeToggle from "../components/audio/MouseModeToggle";
+import RecordingsPanel from "../components/audio/Engines/RecordingsPanel";
+import TopControls from "../components/Controls/TopControls";
+import MouseModeToggle from "../components/Controls/MouseModeToggle";
 import TrackSection from "../components/Tracks/TrackSection";
 import RoomModal from "../components/Rooms/RoomModal";
 
@@ -10,9 +10,9 @@ import PianoKeyboard from "../components/audio/SoundBoards/PianoKeyboard";
 import DrumMachine from "../components/audio/SoundBoards/DrumMachine";
 
 import { KEYS, getKeyIndexForKeyboardChar } from "../components/audio/constants";
-import { useInstrumentHotkeys } from "../components/audio/useInstrumentHotkeys";
-import { useDrumPadConfig } from "../components/audio/useDrumPadConfig";
-import { usePersistedState } from "../components/audio/usePersistedState";
+import { useInstrumentHotkeys } from "../components/audio/SoundBoards/useInstrumentHotkeys";
+import { useDrumPadConfig } from "../components/audio/SoundBoards/useDrumPadConfig";
+import { usePersistedState } from "../components/ui/usePersistedState";
 import CollapsibleNotice from "../components/ui/CollapsibleNotice";
 
 
@@ -31,6 +31,7 @@ export default function InstrumentPage({ instrument }) {
     tracks,
     viewStartTime,
     setViewStartTime,
+    setViewStartTimeAndSnapHead,
     headTimeSeconds,
 
     selectedTrackId,
@@ -115,6 +116,7 @@ export default function InstrumentPage({ instrument }) {
         setWaveform={setWaveform}
         effect={effect}
         setEffect={setEffect}
+        showWaveform={!isDrums}
         roomId={roomId}
         roomStatus={roomStatus}
         openRoomModal={openRoomModal}
@@ -130,6 +132,7 @@ export default function InstrumentPage({ instrument }) {
         subtitle="(click to expand)"
         isOpen={isWaveformOpen}
         setIsOpen={setIsWaveformOpen}
+        className="notice--mini"
       >
         <div className="card">
           <canvas ref={waveCanvasRef} className="wave-canvas" />
@@ -142,6 +145,7 @@ export default function InstrumentPage({ instrument }) {
         subtitle="(advanced)"
         isOpen={isMouseModeOpen}
         setIsOpen={setIsMouseModeOpen}
+        className="notice--mini"
       >
         <div className="card">
           <MouseModeToggle mouseMode={mouseMode} setMouseMode={setMouseMode} />
@@ -154,8 +158,8 @@ export default function InstrumentPage({ instrument }) {
         tracks={tracks}
         viewStartTime={viewStartTime}
         setViewStartTime={setViewStartTime}
+        setViewStartTimeAndSnapHead={setViewStartTimeAndSnapHead}
         headTimeSeconds={headTimeSeconds}
-
         selectedTrackId={selectedTrackId}
         setSelectedTrackId={setSelectedTrackId}
         globalZoom={globalZoom}

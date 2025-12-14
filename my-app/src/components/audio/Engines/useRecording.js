@@ -1,6 +1,6 @@
 // src/components/audio/useRecording.js
 import { useRef, useState, useEffect } from "react";
-import { API_BASE } from "./constants";
+import { API_BASE } from "../constants";
 
 /**
  * Hook responsible for server-backed recording logic:
@@ -11,6 +11,8 @@ import { API_BASE } from "./constants";
  */
 export function useRecording({
   audioEngine,
+  getHeadTimeSeconds,
+  setViewStartTime,
   trackCanvasRefs,
   tracksRef,
   setTracks,
@@ -45,6 +47,10 @@ export function useRecording({
   const recordStartTimeRef = useRef(null);
   const recordDurationRef = useRef(0);
   const recordInitialHeadPosRef = useRef(0);
+  const recordInitialHeadTimeSecondsRef = useRef(0);
+  const lastViewStartDuringRecordRef = useRef(0);
+
+
 
   const activeRecordingTrackIdRef = useRef(activeRecordingTrackId);
   useEffect(() => {
@@ -146,8 +152,8 @@ export function useRecording({
             if (track.id !== targetTrackId) return track;
 
             const trackLength = getTrackLength(track);
-            const clipStartFrac = recordInitialHeadPosRef.current || 0; // 0..1
-            const clipStartTime = clipStartFrac * trackLength;
+            const clipStartFrac = recordInitialHeadPosRef.current || 0; // 0..1 (within visible strip)
+            const clipStartTime = recordInitialHeadTimeSecondsRef.current || 0; // absolute seconds
 
             const newClip = {
               id: crypto.randomUUID(),
@@ -169,9 +175,11 @@ export function useRecording({
 
             // Move head to the end of this new clip (0..1 across strip)
             const stripEndTime = clipStartTime + duration;
-            const clampedEnd = Math.min(trackLength, stripEndTime);
-            const headPos =
-              trackLength > 0 ? clampedEnd / trackLength : 0;
+            const viewStart = lastViewStartDuringRecordRef.current || 0;
+            const endInView = stripEndTime - viewStart;
+            const clampedEndInView = Math.max(0, Math.min(trackLength, endInView));
+            const headPos = trackLength > 0 ? clampedEndInView / trackLength : 0;
+
 
             return {
               ...track,
@@ -241,41 +249,50 @@ export function useRecording({
 
         if (track) {
           const trackLength = getTrackLength(track);
-          const startFrac = recordInitialHeadPosRef.current || 0;
 
-          let headPos = startFrac;
-          if (trackLength > 0) {
-            headPos = startFrac + elapsedSec / trackLength;
+          // Absolute head time = (absolute start time when record began) + elapsed
+          // IMPORTANT: recordInitialHeadTimeSecondsRef.current must be set when recording starts.
+          const headTimeAbs = (recordInitialHeadTimeSecondsRef.current || 0) + elapsedSec;
+
+          // Current viewport start
+          let viewStart = typeof getViewStartTime === "function" ? (getViewStartTime() || 0) : 0;
+
+          // Auto-scroll while recording: when head reaches right edge, move window forward by half
+          if (
+            typeof setViewStartTime === "function" &&
+            trackLength > 0 &&
+            headTimeAbs >= viewStart + trackLength
+          ) {
+            const nextViewStart = viewStart + trackLength / 2;
+            setViewStartTime(nextViewStart);
+            viewStart = nextViewStart;
           }
+          lastViewStartDuringRecordRef.current = viewStart;
 
-          if (headPos >= 1) {
-            headPos = 1;
-            if (recorder.state === "recording") {
-              recorder.stop();
-            }
-          }
+          // Convert absolute head time -> headPos inside current visible window
+          const headPosUnclamped = trackLength > 0 ? (headTimeAbs - viewStart) / trackLength : 0;
+          const headPos = Math.max(0, Math.min(1, headPosUnclamped));
 
-          const stripTime = headPos * trackLength;
-          const viewStart = typeof getViewStartTime === "function" ? getViewStartTime() : 0;
+          // Keep the global head time updated so the yellow tapehead renders correctly
           if (typeof setHeadTimeSeconds === "function") {
-            setHeadTimeSeconds(viewStart + stripTime);
+            setHeadTimeSeconds(headTimeAbs);
           }
 
+          // Collision detection should use absolute head time, not stripTime
           const existingClips = track.clips || [];
           const collided = existingClips.find((c) => {
-            const start = c.startTime;
-            const end = c.startTime + c.duration;
-            return stripTime >= start && stripTime <= end;
+            const start = c.startTime || 0;
+            const end = (c.startTime || 0) + (c.duration || 0);
+            return headTimeAbs >= start && headTimeAbs <= end;
           });
 
           if (collided && recorder.state === "recording") {
             recorder.stop();
           }
 
+
           setTracks((prev) =>
-            prev.map((t) =>
-              t.id === targetTrackId ? { ...t, headPos } : t
-            )
+            prev.map((t) => t.id === targetTrackId ? { ...t, headPos } : t)
           );
         }
       }
@@ -290,7 +307,15 @@ export function useRecording({
         window.cancelAnimationFrame(frameId);
       }
     };
-  }, [mediaRecorderRef, tracksRef, setTracks]);
+  }, [
+  mediaRecorderRef,
+  tracksRef,
+  setTracks,
+  getViewStartTime,
+  setViewStartTime,
+  setHeadTimeSeconds,
+]);
+
 
   // ----- recording controls -----
   const handleTrackRecordToggle = (trackId) => {
@@ -313,10 +338,10 @@ export function useRecording({
 
     const tracksNow = tracksRef.current || [];
     const track = tracksNow.find((t) => t.id === trackId);
-    const headPos =
-      track && (track.headPos != null ? track.headPos : track.tapeHeadPos || 0);
+    const headPos = track && (track.headPos != null ? track.headPos : track.tapeHeadPos || 0);
     recordInitialHeadPosRef.current = headPos || 0;
-
+    // Absolute playhead time (includes viewStartTime offset)
+    recordInitialHeadTimeSecondsRef.current = typeof getHeadTimeSeconds === "function" ? (getHeadTimeSeconds() || 0) : 0;
     recorder.start();
   };
 

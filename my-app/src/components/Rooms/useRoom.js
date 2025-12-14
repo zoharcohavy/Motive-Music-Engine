@@ -1,6 +1,6 @@
 // src/components/audio/useRoom.js
 import { useRef, useState, useEffect, useCallback } from "react";
-import { usePersistedState } from "../audio/usePersistedState";
+import { usePersistedState } from "../ui/usePersistedState";
 
 const ROOM_STORAGE_KEY = "cohavyMusic.roomSession";
 

@@ -3,6 +3,19 @@ import { useRef, useEffect, useCallback } from "react";
 
 // Keep this in sync with TrackSection's BASE_STRIP_SECONDS
 const BASE_STRIP_SECONDS = 10;
+// Keep timeline playable/recordable even when there are no clips yet
+const MIN_TIMELINE_SECONDS = 120;
+
+const getTimelineEndSeconds = (tracks) => {
+  let end = 0;
+  for (const t of tracks || []) {
+    for (const c of t.clips || []) {
+      const clipEnd = (c.startTime || 0) + (c.duration || 0);
+      if (clipEnd > end) end = clipEnd;
+    }
+  }
+  return Math.max(end, MIN_TIMELINE_SECONDS);
+};
 
 /**
  * Transport hook for a global tape head that plays clips
@@ -16,6 +29,7 @@ export function useTransport({
   tracksRef,
   setTracks,
   getViewStartTime,
+  setViewStartTime,
   getHeadTimeSeconds,
   setHeadTimeSeconds,
 }) {
@@ -24,6 +38,8 @@ export function useTransport({
   const transportStartWallTimeRef = useRef(null);
   const transportStartHeadTimeRef = useRef(0);
   const transportActiveClipsRef = useRef(new Map()); // key: `${trackId}:${clipId}` -> HTMLAudioElement
+  const lastAutoScrollAtRef = useRef(0);
+
 
   // ---- Helpers -------------------------------------------------------------
 
@@ -91,8 +107,6 @@ export function useTransport({
       const zoomInner = (tracksInner[0] && tracksInner[0].zoom) || 1;
       const trackLengthInner = BASE_STRIP_SECONDS / zoomInner;
 
-
-
       const now = performance.now();
       const elapsed = (now - transportStartWallTimeRef.current) / 1000;
       const startTime = transportStartHeadTimeRef.current;
@@ -100,20 +114,49 @@ export function useTransport({
       let headTime = startTime + elapsed;
       let reachedEnd = false;
 
-      if (trackLengthInner > 0 && headTime >= trackLengthInner) {
-        headTime = trackLengthInner;
+      // ✅ Clamp to the *timeline end*, not the visible strip length
+      const timelineEnd = getTimelineEndSeconds(tracksInner);
+
+      if (headTime >= timelineEnd) {
+        headTime = timelineEnd;
         reachedEnd = true;
       } else if (headTime < 0) {
         headTime = 0;
       }
 
+      if (reachedEnd) {
+        isTransportPlayingRef.current = false;
+        stopAllTransportAudio();
+        return;
+      }
+
+
       if (typeof setHeadTimeSeconds === "function") {
         setHeadTimeSeconds(headTime);
       }
 
-      const viewStart = typeof getViewStartTime === "function" ? getViewStartTime() : 0;
+      let viewStart = typeof getViewStartTime === "function" ? (getViewStartTime() || 0) : 0;
+
+      // Auto-scroll: if head reaches the right edge of the visible window,
+      // move the window forward by half a window.
+      if (
+        typeof setViewStartTime === "function" &&
+        trackLengthInner > 0 &&
+        headTime >= viewStart + trackLengthInner
+      ) {
+        const nextViewStart = viewStart + trackLengthInner / 2;
+
+        // guard against updating every frame
+        if (Math.abs(nextViewStart - lastAutoScrollAtRef.current) > 0.001) {
+          lastAutoScrollAtRef.current = nextViewStart;
+          setViewStartTime(nextViewStart);
+        }
+
+        viewStart = nextViewStart;
+      }
 
       const newHeadPos = trackLengthInner > 0 ? (headTime - viewStart) / trackLengthInner : 0;
+
       const clampedHeadPos = Math.max(0, Math.min(1, newHeadPos));
 
       // Move the tape head on *all* tracks so UI stays in sync
