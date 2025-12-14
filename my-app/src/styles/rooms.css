@@ -1,0 +1,97 @@
+.roomModal__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.roomModal__panel {
+  background: #111;
+  border: 1px solid #555;
+  border-radius: 8px;
+  padding: 1.25rem 1.5rem;
+  min-width: 320px;
+  color: #eee;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+.roomModal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.roomModal__title {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.roomModal__close {
+  border: none;
+  background: transparent;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.roomModal__desc {
+  font-size: 0.85rem;
+  margin: 0 0 0.75rem 0;
+}
+
+.roomModal__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.roomModal__label {
+  font-size: 0.8rem;
+}
+
+.roomModal__input {
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  border: 1px solid #555;
+  background: #111;
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.roomModal__status {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.roomModal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.roomModal__btn {
+  padding: 0.3rem 0.7rem;
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.8rem;
+}
+
+.roomModal__btn--danger {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid #944;
+  background: #411;
+}
+
+.roomModal__btn--primary {
+  border: 1px solid #5af;
+  background: #154;
+}

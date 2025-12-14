@@ -1,0 +1,204 @@
+/* =========================
+   DrumKeyboard / Drum pads
+   ========================= */
+
+.drumKb {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 200px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.drumKb__inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+.drumKb__imageWrap {
+  position: absolute;
+  left: 50%;
+  right: 50%;
+  bottom: 3%;
+  background: radial-gradient(circle at center, #555, #222);
+  opacity: 0.9;
+  z-index: 1;
+}
+
+.drumKb__image {
+  width: 50%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.drumKb__grid {
+  position: absolute;
+  inset: 15% 20%;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 8px;
+  z-index: 2;
+}
+
+.drumKb__pad {
+  border: 2px solid #000;
+  border-radius: 6px;
+  background: #888;
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.8);
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  color: #111;
+  font-weight: 600;
+}
+
+.drumKb__pad--active {
+  background: #ffca3a;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.8);
+}
+
+
+
+/* =========================
+   PianoKeyboard
+   ========================= */
+
+.pianoKb {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 90px;
+  overflow-x: hidden;
+  background: #ddd;
+}
+
+.pianoKb__inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/* Base white key (dynamic left/width/border-left stay inline) */
+.pianoKb__white {
+  position: absolute;
+  height: 100%;
+  border-top: 1px solid #333;
+  border-bottom: 1px solid #333;
+  border-right: 1px solid #333;
+
+  background: white;
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+
+  padding-bottom: 0.15rem;
+  cursor: pointer;
+  user-select: none;
+
+  font-size: 0.5rem;
+  overflow: hidden;
+  white-space: nowrap;
+
+  z-index: 1;
+  opacity: 1;
+}
+
+.pianoKb__white.isActive {
+  background: #eee;
+  opacity: 0.7;
+}
+
+/* Base black key (dynamic left/width/transform stays inline) */
+.pianoKb__black {
+  position: absolute;
+  height: 60%;
+  top: 0;
+  border: 1px solid #222;
+
+  background: black;
+  color: white;
+  box-sizing: border-box;
+
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+
+  padding-bottom: 0.15rem;
+  cursor: pointer;
+  user-select: none;
+
+  font-size: 0.45rem;
+  overflow: hidden;
+  white-space: nowrap;
+
+  z-index: 2;
+  opacity: 1;
+}
+
+.pianoKb__black.isActive {
+  background: #333;
+  opacity: 0.7;
+}
+
+
+
+/* =========================
+   RecordingsPanel
+   ========================= */
+
+.recPanel {
+  position: absolute;
+  top: 1rem;
+  right: 1.5rem;
+  background: rgba(6, 24, 28, 0.85);
+  border-radius: 14px;
+  border: 1px solid rgba(163, 255, 232, 0.12);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  padding: 0.75rem 1rem;
+  max-width: 260px;
+  max-height: 40vh;
+  overflow-y: auto;
+  font-size: 0.8rem;
+}
+
+.recPanel__title {
+  font-weight: bold;
+  margin-bottom: 0.5rem;
+}
+
+.recPanel__error {
+  font-style: italic;
+  color: #f88;
+}
+
+.recPanel__empty {
+  font-style: italic;
+}
+
+.recPanel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.recPanel__item {
+  margin-bottom: 0.25rem;
+}
+
+.recPanel__link {
+  color: #9cf;
+  text-decoration: none;
+}

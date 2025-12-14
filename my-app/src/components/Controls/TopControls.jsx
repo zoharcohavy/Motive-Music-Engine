@@ -21,63 +21,37 @@ export default function TopControls({
       : "No other users yet";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+    <div className="topControls__col">
     {/* Top bar: room buttons left, room info centered */}
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "0.75rem",
-      }}
-    >
+    <div className="topControls__row">
+
       {/* Left: room buttons */}
-      <div style={{ flex: 1, display: "flex", gap: "0.5rem" }}>
+      <div className="topControls__left">
         <button
           type="button"
-          onClick={
-            roomStatus === "connected" ? disconnectRoom : openRoomModal
-          }
-          style={{
-            padding: "0.2rem 0.6rem",
-            borderRadius: "4px",
-            border: "1px solid rgba(163, 255, 232, 0.22)",
-            background: roomStatus === "connected" ? "rgba(59, 183, 168, 0.18)" : "rgba(0,0,0,0.25)",
-            color: "rgba(232, 244, 242, 0.95)",
-            cursor: "pointer",
-            fontSize: "0.8rem",
-          }}
+          onClick={roomStatus === "connected" ? disconnectRoom : openRoomModal}
+          className={`topControls__roomBtn ${roomStatus === "connected" ? "topControls__roomBtn--connected" : ""}`}
         >
           {roomStatus === "connected" ? "Leave Room" : "Connect to Room"}
         </button>
+
 
         {roomStatus === "connected" && (
           <button
             type="button"
             onClick={handleRoomRecordToggle}
-            style={{
-              padding: "0.2rem 0.6rem",
-              borderRadius: "4px",
-              border: "1px solid rgba(240, 75, 90, 0.35)",
-              background: isRoomRecording ? "rgba(240, 75, 90, 0.35)" : "rgba(240, 75, 90, 0.12)",
-              color: "rgba(232, 244, 242, 0.95)",
-              cursor: "pointer",
-              fontSize: "0.8rem",
-            }}
+            className={`topControls__roomRecBtn ${
+              isRoomRecording ? "topControls__roomRecBtn--active" : ""
+            }`}
           >
+
             {isRoomRecording ? "⏹ Stop Room Record" : "⏺ Record Room"}
           </button>
         )}
       </div>
 
       {/* Center: room + usernames */}
-      <div
-        style={{
-          flex: 1,
-          textAlign: "center",
-          fontSize: "0.85rem",
-          opacity: 0.85,
-        }}
-      >
+      <div className="topControls__center">
         {roomStatus === "connected" && roomId ? (
           <>
             Room: <strong>{roomId}</strong>
@@ -85,25 +59,18 @@ export default function TopControls({
             Users: {usersLabel}
           </>
         ) : (
-          <span style={{ opacity: 0.7 }}>Not in a room</span>
+          <span className="topControls__notInRoom">Not in a room</span>
         )}
       </div>
 
       {/* Right spacer */}
-      <div style={{ flex: 1 }} />
+      <div className="topControls__spacer" />
     </div>
 
       {/* Waveform selector (piano only) */}
       {showWaveform && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            flexWrap: "wrap",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+        <div className="topControls__rowWrap">
+          <div className="topControls__group">
             <label>Waveform:</label>
             <select
               className="select--compact"
@@ -121,7 +88,7 @@ export default function TopControls({
 
 
       {/* Effect selector */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+      <div className="topControls__group">
         <label>Effect:</label>
         <select
           className="select--compact"

@@ -48,64 +48,30 @@ export default function RoomModal({
       : "Not connected";
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        background: "rgba(0, 0, 0, 0.6)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 9999,
-      }}
-    >
-      <div
-        style={{
-          background: "#111",
-          border: "1px solid #555",
-          borderRadius: 8,
-          padding: "1.25rem 1.5rem",
-          minWidth: 320,
-          color: "#eee",
-          boxShadow: "0 10px 30px rgba(0, 0, 0, 0.6)",
-        }}
-      >
+    <div className="roomModal__overlay">
+      <div className="roomModal__panel">
         {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "0.75rem",
-          }}
-        >
-          <h2 style={{ margin: 0, fontSize: "1.1rem" }}>Connect to room</h2>
+        <div className="roomModal__header">
+          <h2 className="roomModal__title">Connect to room</h2>
           <button
             type="button"
             onClick={onClose}
-            style={{
-              border: "none",
-              background: "transparent",
-              color: "#aaa",
-              cursor: "pointer",
-              fontSize: "1.1rem",
-              lineHeight: 1,
-            }}
+            className="roomModal__close"
           >
             ✕
           </button>
         </div>
 
-        <p style={{ fontSize: "0.85rem", margin: "0 0 0.75rem 0" }}>
+        <p className="roomModal__desc">
           Type a room name. If a room with that name already exists you&apos;ll
           join it; if not, a new room will be created for others to join.
         </p>
 
         <form
           onSubmit={handleSubmit}
-          style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}
+          className="roomModal__form"
         >
-          <label style={{ fontSize: "0.8rem" }}>
+          <label className="roomModal__label">
             Room name
             <input
               type="text"
@@ -113,64 +79,31 @@ export default function RoomModal({
               onChange={(e) => setRoomInput(e.target.value)}
               placeholder="e.g. piano-lab-1"
               autoFocus
-              style={{
-                width: "100%",
-                marginTop: "0.25rem",
-                padding: "0.35rem 0.5rem",
-                borderRadius: 4,
-                border: "1px solid #555",
-                background: "#111",
-                color: "#fff",
-                fontSize: "0.9rem",
-              }}
+              className="roomModal__input"
             />
           </label>
 
-          <label style={{ fontSize: "0.8rem" }}>
+          <label className="roomModal__label">
             Username (required)
             <input
               type="text"
               value={usernameInput}
               onChange={(e) => setUsernameInput(e.target.value)}
               placeholder="e.g. Zohar"
-              style={{
-                width: "100%",
-                marginTop: "0.25rem",
-                padding: "0.35rem 0.5rem",
-                borderRadius: 4,
-                border: "1px solid #555",
-                background: "#111",
-                color: "#fff",
-                fontSize: "0.9rem",
-              }}
+              className="roomModal__input"
             />
           </label>
 
-          <div style={{ fontSize: "0.75rem", opacity: 0.8 }}>
+          <div className="roomModal__status">
             Status: {statusText}
           </div>
 
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "flex-end",
-              gap: "0.5rem",
-              marginTop: "0.25rem",
-            }}
-          >
+          <div className="roomModal__actions">
             {roomStatus === "connected" && (
               <button
                 type="button"
                 onClick={handleDisconnect}
-                style={{
-                  padding: "0.3rem 0.6rem",
-                  borderRadius: 4,
-                  border: "1px solid #944",
-                  background: "#411",
-                  color: "#fff",
-                  cursor: "pointer",
-                  fontSize: "0.8rem",
-                }}
+                className="roomModal__btn roomModal__btn--danger"
               >
                 Disconnect
               </button>
@@ -178,16 +111,8 @@ export default function RoomModal({
             <button
               type="submit"
               disabled={roomStatus === "connecting"}
-              style={{
-                padding: "0.3rem 0.7rem",
-                borderRadius: 4,
-                border: "1px solid #5af",
-                background: "#154",
-                color: "#fff",
-                cursor: "pointer",
-                fontSize: "0.8rem",
-                opacity: roomStatus === "connecting" ? 0.7 : 1,
-              }}
+              className="roomModal__btn roomModal__btn--primary"
+              style={{ opacity: roomStatus === "connecting" ? 0.7 : 1 }}
             >
               Join / Create
             </button>

@@ -45,59 +45,22 @@ export default function DrumKeyboard({
 
   return (
     <div
-      style={{
-        position: "fixed",
-        left: 0,
-        right: 0,
-        bottom: 0,
-        height: "200px",
-        background: "#FFF",
-        overflow: "hidden",
-      }}
+      className="drumKb"
       onMouseUp={() => setIsMouseDown(false)}
       onMouseLeave={() => setIsMouseDown(false)}
     >
-      <div
-        style={{
-          position: "relative",
-          width: "100%",
-          height: "100%",
-        }}
-      >
+      <div className="drumKb__inner">
         {/* DRUM IMAGE PLACEHOLDER */}
-        <div
-          style={{
-            position: "absolute",
-            left: "50%",
-            right: "50%",
-            bottom: "3%",
-            // Replace this with your <img /> later
-            background: "radial-gradient(circle at center, #555, #222)",
-            opacity: 0.9,
-            zIndex: 1,
-          }}
-        >
-          
+        <div className="drumKb__imageWrap">
           <img
             src={DrumImage}
             alt="Drum"
-            style={{ width: "50%", height: "100%", objectFit: "cover" }}
+            className="drumKb__image"
           />
-          
         </div>
 
         {/* 4x4 DRUM PAD GRID OVER THE IMAGE */}
-        <div
-          style={{
-            position: "absolute",
-            inset: "15% 20%", // top/right/bottom/left — centers the square grid
-            display: "grid",
-            gridTemplateColumns: "repeat(4, 1fr)",
-            gridTemplateRows: "repeat(4, 1fr)",
-            gap: "8px",
-            zIndex: 2, // make sure pads are on top of image
-          }}
-        >
+        <div className="drumKb__grid">
           {pads.map((pad) => (
             <button
               key={pad.id}
@@ -111,23 +74,9 @@ export default function DrumKeyboard({
                   onMouseEnterKey(pad);
                 }
               }}
-              style={{
-                border: "2px solid #000",
-                borderRadius: "6px",
-                background: isActive(pad.id) ? "#ffca3a" : "#888",
-                boxShadow: isActive(pad.id)
-                  ? "0 0 12px rgba(255, 255, 255, 0.8)"
-                  : "0 0 6px rgba(0, 0, 0, 0.8)",
-                cursor: "pointer",
-                userSelect: "none",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "0.8rem",
-                color: "#111",
-                fontWeight: "600",
-              }}
+              className={`drumKb__pad ${isActive(pad.id) ? "drumKb__pad--active" : ""}`}
             >
+
               {pad.name}
             </button>
           ))}

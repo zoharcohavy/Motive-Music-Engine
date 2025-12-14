@@ -1,3 +1,10 @@
+@import "./base.css";
+@import "./controls.css";
+@import "./tracks.css";
+@import "./instruments.css";
+@import "./rooms.css";
+@import "./ui.css";
+
 :root {
   --bg-top: #0f505a;
   --bg-bottom: #093840;

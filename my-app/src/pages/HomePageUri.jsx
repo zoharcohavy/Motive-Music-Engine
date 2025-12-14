@@ -1,4 +1,3 @@
-// src/pages/SearchPage.jsx
 import { useEffect } from "react";
 import { Link } from "react-router-dom";
 import PianoImg from "../assets/icons/Piano.jpg";
@@ -7,14 +6,7 @@ export default function HomePage() {
   return (
     <div className="page-container">
       <img
-        style={{
-          position: "absolute", 
-          width: "150px",
-          height: "150px",
-          border: "10px solid #000000", 
-          borderRadius: "12px", 
-          top: "12px",
-          right: "100px" }}
+        className="homePage__pianoImg"
         src={PianoImg}
         alt="Italian Trulli"
       />

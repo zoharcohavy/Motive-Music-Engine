@@ -82,8 +82,21 @@ export function useTransport({
     const trackLength = BASE_STRIP_SECONDS / zoomNow;
 
     // Get current head position from the first track (they should all be in sync)
-    const currentHeadPos = tracksNow[0].headPos != null ? tracksNow[0].headPos : tracksNow[0].tapeHeadPos || 0;
-    const startHeadTime = typeof getHeadTimeSeconds === "function" ? getHeadTimeSeconds() : trackLength * currentHeadPos;
+    // IMPORTANT: headPos is clamped to the visible window and is NOT a reliable absolute time.
+    // Always start from absolute headTimeSeconds if available.
+    // If it's missing, derive absolute time as viewStart + headPos * trackLength.
+    const currentHeadPos =
+      tracksNow[0].headPos != null ? tracksNow[0].headPos : tracksNow[0].tapeHeadPos || 0;
+
+    const viewStartNow =
+      typeof getViewStartTime === "function" ? (getViewStartTime() || 0) : 0;
+
+    let startHeadTime =
+      typeof getHeadTimeSeconds === "function" ? (getHeadTimeSeconds() ?? null) : null;
+
+    if (!Number.isFinite(startHeadTime)) {
+      startHeadTime = viewStartNow + trackLength * currentHeadPos;
+    }
 
 
     isTransportPlayingRef.current = true;
@@ -137,23 +150,44 @@ export function useTransport({
 
       let viewStart = typeof getViewStartTime === "function" ? (getViewStartTime() || 0) : 0;
 
-      // Auto-scroll: if head reaches the right edge of the visible window,
-      // move the window forward by half a window.
-      if (
-        typeof setViewStartTime === "function" &&
-        trackLengthInner > 0 &&
-        headTime >= viewStart + trackLengthInner
-      ) {
-        const nextViewStart = viewStart + trackLengthInner / 2;
+      // Auto-scroll:
+      // - If the head is slightly past the right edge during playback, shift by half a window (normal DAW feel).
+      // - If the head is FAR offscreen (left or right), jump directly to it in ONE shot.
+      if (typeof setViewStartTime === "function" && trackLengthInner > 0) {
+        const padding = trackLengthInner * 0.12; // head sits slightly right of left edge
+        const viewEnd = viewStart + trackLengthInner;
 
-        // guard against updating every frame
-        if (Math.abs(nextViewStart - lastAutoScrollAtRef.current) > 0.001) {
-          lastAutoScrollAtRef.current = nextViewStart;
-          setViewStartTime(nextViewStart);
+        let nextViewStart = null;
+
+        // Head is offscreen to the LEFT -> jump directly to show it
+        if (headTime < viewStart) {
+          nextViewStart = Math.max(0, headTime - padding);
         }
 
-        viewStart = nextViewStart;
+        // Head is offscreen to the RIGHT -> either jump (far) or shift (near)
+        if (headTime > viewEnd) {
+          const overshoot = headTime - viewEnd;
+
+          // If it's more than ~half a window away, do a one-shot jump to the head.
+          // This fixes the "press play/pause repeatedly to catch up" issue.
+          if (overshoot > trackLengthInner * 0.5) {
+            nextViewStart = Math.max(0, headTime - padding);
+          } else {
+            // Otherwise, normal behavior: shift by half a window
+            nextViewStart = viewStart + trackLengthInner / 2;
+          }
+        }
+
+        if (nextViewStart != null) {
+          // guard against updating every frame
+          if (Math.abs(nextViewStart - lastAutoScrollAtRef.current) > 0.001) {
+            lastAutoScrollAtRef.current = nextViewStart;
+            setViewStartTime(nextViewStart);
+          }
+          viewStart = nextViewStart;
+        }
       }
+
 
       const newHeadPos = trackLengthInner > 0 ? (headTime - viewStart) / trackLengthInner : 0;
 
@@ -248,6 +282,7 @@ export function useTransport({
   setTracks,
   stopAllTransportAudio,
   getViewStartTime,
+  setViewStartTime,
   getHeadTimeSeconds,
   setHeadTimeSeconds,
 ]);
