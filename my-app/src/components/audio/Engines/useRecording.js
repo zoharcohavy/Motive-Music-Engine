@@ -201,14 +201,20 @@ export function useRecording({
 
       try {
         const formData = new FormData();
-        formData.append("audio", blob, "recording.webm");
+        const safeId =
+          (typeof crypto !== "undefined" && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+        formData.append("audio", blob, `recording-${safeId}.webm`);
+
 
         await fetch(`${API_BASE}/api/recordings/upload`, {
           method: "POST",
           body: formData,
         });
 
-        fetchRecordings();
+        await fetchRecordings();
       } catch (err) {
         console.error("Upload failed:", err);
       }
