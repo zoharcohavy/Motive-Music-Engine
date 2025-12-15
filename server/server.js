@@ -36,16 +36,22 @@ app.get("/api/recordings", (req, res) => {
   fs.readdir(recordingsDir, (err, files) => {
     if (err) {
       console.error("Error reading recordings directory:", err);
-      return res
-        .status(500)
-        .json({ error: "Failed to read recordings directory" });
+      return res.status(500).json({ error: "Failed to read recordings directory" });
     }
 
-    // only return wav files (just in case something else is in that folder)
-    const wavFiles = files.filter((f) => f.toLowerCase().endsWith(".wav"));
-    res.json({ recordings: wavFiles });
+    const audioFiles = files
+      .filter((f) => {
+        const lower = f.toLowerCase();
+        return lower.endsWith(".wav") || lower.endsWith(".webm") || lower.endsWith(".ogg");
+      })
+      // optional: newest first
+      .sort((a, b) => b.localeCompare(a));
+
+    res.json({ recordings: audioFiles });
   });
 });
+
+
 
 // Upload recording: POST /api/recordings/upload  (field name "audio")
 const storage = multer.diskStorage({
@@ -62,14 +68,21 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 app.post("/api/recordings/upload", upload.single("audio"), (req, res) => {
+  console.log("UPLOAD hit /api/recordings/upload");
+  console.log("UPLOAD recordingsDir =", recordingsDir);
+  console.log("UPLOAD req.file =", req.file);
+  console.log("UPLOAD req.body =", req.body);
+
   if (!req.file) {
     return res.status(400).json({ error: "No audio file uploaded" });
   }
-  res.json({
-    success: true,
-    filename: req.file.filename,
-  });
+
+  // prove it's really on disk
+  console.log("UPLOAD saved path exists?", fs.existsSync(req.file.path));
+
+  res.json({ success: true, filename: req.file.filename });
 });
+
 
 // Optional health check
 app.get("/health", (req, res) => {
