@@ -116,7 +116,8 @@ export function useRecording({
     };
 
     mediaRecorder.onstop = async () => {
-      const blob = new Blob(recordingChunksRef.current, { type: "audio/wav" });
+      const mime = mediaRecorderRef.current?.mimeType || "audio/webm";
+      const blob = new Blob(recordingChunksRef.current, { type: mime });
       recordingChunksRef.current = [];
 
       const targetTrackId = recordingTargetTrackIdRef.current;
@@ -200,7 +201,7 @@ export function useRecording({
 
       try {
         const formData = new FormData();
-        formData.append("audio", blob, "recording.wav");
+        formData.append("audio", blob, "recording.webm");
 
         await fetch(`${API_BASE}/api/recordings/upload`, {
           method: "POST",
