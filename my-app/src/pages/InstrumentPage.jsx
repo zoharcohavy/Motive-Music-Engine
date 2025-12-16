@@ -34,7 +34,6 @@ export default function InstrumentPage({ instrument }) {
     tracks,
     viewStartTime,
     setViewStartTime,
-    setViewStartTimeAndSnapHead,
     headTimeSeconds,
 
     selectedTrackId,
@@ -43,7 +42,6 @@ export default function InstrumentPage({ instrument }) {
     changeZoom,
     handleGlobalPlay,
     addTrack,
-    deleteTrack,
     handleTrackRecordToggle,
     activeRecordingTrackId,
 
@@ -181,11 +179,9 @@ export default function InstrumentPage({ instrument }) {
         changeZoom={changeZoom}
         handleGlobalPlay={handleGlobalPlay}
         addTrack={addTrack}
-        deleteTrack={deleteTrack}
         handleTrackRecordToggle={handleTrackRecordToggle}
         handleTrackUpload={handleTrackUpload}
         activeRecordingTrackId={activeRecordingTrackId}
-        mouseMode={mouseMode}
         handleTrackStripMouseDown={handleTrackStripMouseDown}
         handleTrackStripMouseMove={handleTrackStripMouseMove}
         handleTrackStripContextMenu={handleTrackStripContextMenu}

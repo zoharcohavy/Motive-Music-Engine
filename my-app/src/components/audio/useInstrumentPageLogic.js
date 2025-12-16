@@ -268,14 +268,12 @@ export function useInstrumentPageLogic() {
     tracks: trackModel.tracks,
     viewStartTime: trackModel.viewStartTime,
     setViewStartTime: trackModel.setViewStartTime,
-    setViewStartTimeAndSnapHead: trackModel.setViewStartTimeAndSnapHead,
     headTimeSeconds: trackModel.headTimeSeconds,
 
     trackCanvasRefs: trackModel.trackCanvasRefs,
     selectedTrackId: trackModel.selectedTrackId,
     setSelectedTrackId: trackModel.setSelectedTrackId,
     addTrack: trackModel.addTrack,
-    deleteTrack: trackModel.deleteTrack,
     activeRecordingTrackId: trackModel.activeRecordingTrackId,
 
     // ===== Recording controls + recordings list =====

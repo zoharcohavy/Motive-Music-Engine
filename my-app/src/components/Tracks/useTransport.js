@@ -6,6 +6,21 @@ const BASE_STRIP_SECONDS = 10;
 // Keep timeline playable/recordable even when there are no clips yet
 const MIN_TIMELINE_SECONDS = 120;
 
+const TIMELINE_CHUNK_SECONDS = 120; // 2 minutes
+const TIMELINE_GROW_BUFFER = 10;    // last 10 seconds triggers growth
+
+const getDynamicTimelineEndSeconds = (tracks, headTimeSeconds) => {
+  const baseEnd = getTimelineEndSeconds(tracks); // at least 120
+  const head = Math.max(0, Number(headTimeSeconds) || 0);
+
+  const snappedEnd =
+    Math.max(TIMELINE_CHUNK_SECONDS, Math.ceil(Math.max(baseEnd, head) / TIMELINE_CHUNK_SECONDS) * TIMELINE_CHUNK_SECONDS);
+
+  return head >= snappedEnd - TIMELINE_GROW_BUFFER
+    ? snappedEnd + TIMELINE_CHUNK_SECONDS
+    : snappedEnd;
+};
+
 const getTimelineEndSeconds = (tracks) => {
   let end = 0;
   for (const t of tracks || []) {
@@ -134,7 +149,7 @@ export function useTransport({
       let reachedEnd = false;
 
       // ✅ Clamp to the *timeline end*, not the visible strip length
-      const timelineEnd = getTimelineEndSeconds(tracksInner);
+      const timelineEnd = getDynamicTimelineEndSeconds(tracksInner, headTime);
 
       if (headTime >= timelineEnd) {
         headTime = timelineEnd;
