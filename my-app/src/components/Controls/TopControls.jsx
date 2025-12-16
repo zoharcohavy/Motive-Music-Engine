@@ -1,6 +1,3 @@
-// src/components/audio/TopControls.jsx
-import React from "react";
-
 export default function TopControls({
   waveform,
   setWaveform,

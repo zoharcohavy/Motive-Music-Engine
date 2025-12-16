@@ -1,15 +1,15 @@
-import React, { useRef } from "react";
+import { useRef } from "react";
 
 const BASE_STRIP_SECONDS = 10;
 const MIN_TIMELINE_SECONDS = 120; // 2 minutes: makes Scroll usable on page load
 
-const getTrackLengthForTrack = (track) => {
+const getTrackLength = (track) => {
   const zoom = track.zoom || 1;
   return BASE_STRIP_SECONDS / zoom;
 };
 
 const getHeadSecondsForTrack = (track) => {
-  const trackLength = getTrackLengthForTrack(track);
+  const trackLength = getTrackLength(track);
   const headPos =
     track.headPos != null ? track.headPos : track.tapeHeadPos || 0;
   return trackLength * headPos;
@@ -55,9 +55,7 @@ export default function TrackSection({
   handleTrackRecordToggle,
   handleTrackUpload,
   activeRecordingTrackId,
-  handleTrackStripMouseDown,
-  handleTrackStripMouseMove,
-  handleTrackStripContextMenu,
+  mouse_interactions,
   trackCanvasRefs,
 }) {
   const fileInputRefs = useRef({});
@@ -285,11 +283,12 @@ const headLeftPercent = clamped * 100;
                 width={800}
                 height={40}
                 className="trackSection__canvas"
-                onMouseDown={(e) => handleTrackStripMouseDown?.(track.id, e)}
-                onMouseMove={(e) => handleTrackStripMouseMove?.(track.id, e)}
-                onContextMenu={(e) => handleTrackStripContextMenu?.(track.id, e)}
-
-
+                style={{ touchAction: "none" }}
+                onPointerDown={(e) => mouse_interactions?.onPointerDown?.(track.id, e)}
+                onPointerMove={(e) => mouse_interactions?.onPointerMove?.(track.id, e)}
+                onPointerUp={(e) => mouse_interactions?.onPointerUp?.(track.id, e)}
+                onPointerCancel={(e) => mouse_interactions?.onPointerCancel?.(track.id, e)}
+                onContextMenu={(e) => mouse_interactions?.onContextMenu?.(track.id, e)}
               />
             </div>
           </div>

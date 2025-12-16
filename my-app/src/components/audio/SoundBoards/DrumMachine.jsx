@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import DrumImage from "../../../assets/images/DrumImage.jpeg";
 import kickSample from "../../../assets/drum_samples/kick.wav";
 // import snareSample from "../../../assets/drum_samples/snare.wav";

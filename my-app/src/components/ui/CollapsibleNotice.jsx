@@ -1,5 +1,3 @@
-import React from "react";
-
 /**
  * Compact, collapsible "notice" row.
  * Intended for hiding advanced controls (mouse mode, analyser, etc.) behind a small header.
