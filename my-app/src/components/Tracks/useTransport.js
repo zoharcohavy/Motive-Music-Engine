@@ -39,6 +39,7 @@ export function useTransport({
   const transportStartHeadTimeRef = useRef(0);
   const transportActiveClipsRef = useRef(new Map()); // key: `${trackId}:${clipId}` -> HTMLAudioElement
   const lastAutoScrollAtRef = useRef(0);
+  const viewStartRef = useRef(0);
 
 
   // ---- Helpers -------------------------------------------------------------
@@ -90,6 +91,9 @@ export function useTransport({
 
     const viewStartNow =
       typeof getViewStartTime === "function" ? (getViewStartTime() || 0) : 0;
+    viewStartRef.current = viewStartNow;
+    lastAutoScrollAtRef.current = viewStartNow;
+
 
     let startHeadTime =
       typeof getHeadTimeSeconds === "function" ? (getHeadTimeSeconds() ?? null) : null;
@@ -102,6 +106,8 @@ export function useTransport({
     isTransportPlayingRef.current = true;
     transportStartWallTimeRef.current = performance.now();
     transportStartHeadTimeRef.current = startHeadTime;
+    
+
 
     // Ensure all tracks share the same initial headPos / tapeHeadPos
 
@@ -148,45 +154,51 @@ export function useTransport({
         setHeadTimeSeconds(headTime);
       }
 
-      let viewStart = typeof getViewStartTime === "function" ? (getViewStartTime() || 0) : 0;
+      let viewStart = viewStartRef.current || 0;
 
       // Auto-scroll:
       // - If the head is slightly past the right edge during playback, shift by half a window (normal DAW feel).
       // - If the head is FAR offscreen (left or right), jump directly to it in ONE shot.
       if (typeof setViewStartTime === "function" && trackLengthInner > 0) {
-        const padding = trackLengthInner * 0.12; // head sits slightly right of left edge
+        // Put head around 30% into view when we need to jump to it
+        const jumpPadding = trackLengthInner * 0.30;
         const viewEnd = viewStart + trackLengthInner;
+        const pageShift = trackLengthInner * 0.60;
 
         let nextViewStart = null;
 
-        // Head is offscreen to the LEFT -> jump directly to show it
+        // If head is far offscreen LEFT: one-shot jump
         if (headTime < viewStart) {
-          nextViewStart = Math.max(0, headTime - padding);
+          nextViewStart = Math.max(0, headTime - jumpPadding);
         }
 
-        // Head is offscreen to the RIGHT -> either jump (far) or shift (near)
+        // If head is offscreen RIGHT (or past our follow threshold):
+        // shift the view by a chunk so the head jumps back left and can visibly move again.
         if (headTime > viewEnd) {
+          // If it's WAY off to the right, jump directly to it.
+          const viewEnd = viewStart + trackLengthInner;
           const overshoot = headTime - viewEnd;
 
-          // If it's more than ~half a window away, do a one-shot jump to the head.
-          // This fixes the "press play/pause repeatedly to catch up" issue.
           if (overshoot > trackLengthInner * 0.5) {
-            nextViewStart = Math.max(0, headTime - padding);
+            nextViewStart = Math.max(0, headTime - jumpPadding);
           } else {
-            // Otherwise, normal behavior: shift by half a window
-            nextViewStart = viewStart + trackLengthInner / 2;
+            nextViewStart = Math.max(0, viewStart + pageShift);
           }
         }
 
         if (nextViewStart != null) {
-          // guard against updating every frame
           if (Math.abs(nextViewStart - lastAutoScrollAtRef.current) > 0.001) {
             lastAutoScrollAtRef.current = nextViewStart;
+
+            // ✅ update immediately so the animation loop doesn't "chase" stale state
+            viewStartRef.current = nextViewStart;
+
             setViewStartTime(nextViewStart);
           }
           viewStart = nextViewStart;
         }
       }
+
 
 
       const newHeadPos = trackLengthInner > 0 ? (headTime - viewStart) / trackLengthInner : 0;
