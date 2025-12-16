@@ -24,6 +24,9 @@ export default function InstrumentPage({ instrument }) {
     setEffect,
     recordings,
     recordingsError,
+    storageFiles,
+    storageError,
+    handleTrackUpload,
     waveCanvasRef,
     mouseMode,
     setMouseMode,
@@ -70,6 +73,11 @@ export default function InstrumentPage({ instrument }) {
     "ui.instrumentPage.waveformOpen",
     false
   );
+      const [isRecPanelOpen, setIsRecPanelOpen] = usePersistedState(
+      "ui.instrumentPage.recPanelOpen",
+      true
+    );
+
   const [isMouseModeOpen, setIsMouseModeOpen] = usePersistedState(
     "ui.instrumentPage.mouseModeOpen",
     false
@@ -108,7 +116,15 @@ export default function InstrumentPage({ instrument }) {
   return (
     <div className="tone-test-page app-shell">
       {/* Recordings list in upper-right */}
-      <RecordingsPanel recordings={recordings} recordingsError={recordingsError} />
+      <RecordingsPanel
+        isOpen={isRecPanelOpen}
+        onToggle={() => setIsRecPanelOpen((v) => !v)}
+        recordings={recordings}
+        recordingsError={recordingsError}
+        storageFiles={storageFiles}
+        storageError={storageError}
+      />
+
 
       {/* Top controls */}
       <TopControls
@@ -167,6 +183,7 @@ export default function InstrumentPage({ instrument }) {
         addTrack={addTrack}
         deleteTrack={deleteTrack}
         handleTrackRecordToggle={handleTrackRecordToggle}
+        handleTrackUpload={handleTrackUpload}
         activeRecordingTrackId={activeRecordingTrackId}
         mouseMode={mouseMode}
         handleTrackStripMouseDown={handleTrackStripMouseDown}

@@ -182,6 +182,7 @@ export function useTrackModel(options = {}) {
     // ---------- Mouse interaction on track strips ----------
 
   const handleTrackStripMouseDown = (trackId, e) => {
+    setSelectedTrackId(trackId);
     const rect = e.currentTarget.getBoundingClientRect();
     let frac = (e.clientX - rect.left) / rect.width; // 0..1 across the strip
     frac = Math.max(0, Math.min(1, frac));

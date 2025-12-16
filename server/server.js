@@ -23,10 +23,24 @@ app.use(express.json());
 // Folder where .wav files are stored
 const recordingsDir = path.join(__dirname, "recordings");
 
+
+
 // Make sure the folder exists
 if (!fs.existsSync(recordingsDir)) {
   fs.mkdirSync(recordingsDir, { recursive: true });
 }
+// ---------- STORAGE (UPLOADED CLIPS) SETUP ----------
+
+const storageDir = path.join(__dirname, "storage");
+
+// Make sure the folder exists
+if (!fs.existsSync(storageDir)) {
+  fs.mkdirSync(storageDir, { recursive: true });
+}
+
+// Serve uploaded files at /storage/<filename>
+app.use("/storage", express.static(storageDir));
+
 
 // Serve the raw wav files at /recordings/<filename>
 app.use("/recordings", express.static(recordingsDir));
@@ -51,6 +65,20 @@ app.get("/api/recordings", (req, res) => {
   });
 });
 
+// List uploaded clips: GET /api/storage
+app.get("/api/storage", (req, res) => {
+  fs.readdir(storageDir, (err, files) => {
+    if (err) return res.status(500).json({ error: "Failed to list storage" });
+
+    const audioFiles = files
+      .filter((f) => !f.startsWith("."))
+      .sort((a, b) => b.localeCompare(a));
+
+    res.json({ storage: audioFiles });
+  });
+});
+
+
 
 
 // Upload recording: POST /api/recordings/upload  (field name "audio")
@@ -66,6 +94,25 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+
+const storageUpload = multer({ dest: storageDir });
+
+// Upload a clip: POST /api/storage/upload (field name: "clip")
+app.post("/api/storage/upload", storageUpload.single("clip"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+  const original = req.file.originalname || "clip";
+  const safeOriginal = original.replace(/[^\w.\-() ]+/g, "_");
+  const finalName = `${Date.now()}__${safeOriginal}`;
+
+  const fromPath = req.file.path;
+  const toPath = path.join(storageDir, finalName);
+
+  fs.rename(fromPath, toPath, (err) => {
+    if (err) return res.status(500).json({ error: "Failed to store file" });
+    res.json({ filename: finalName });
+  });
+});
 
 app.post("/api/recordings/upload", upload.single("audio"), (req, res) => {
   console.log("UPLOAD hit /api/recordings/upload");
