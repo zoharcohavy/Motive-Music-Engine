@@ -3,6 +3,7 @@ import { useAudioEngine } from "./Engines/useAudioEngine";
 import { useRoom } from "../Rooms/useRoom";
 import { useTrackModel } from "../Tracks/useTrackModel";
 import { useRecording } from "./Engines/useRecording";
+import { API_BASE } from "./constants";
 
 
 
@@ -136,6 +137,103 @@ export function useInstrumentPageLogic() {
   };
 
 
+  // ===== Upload an existing audio file and place it on a track as a clip =====
+  const getAudioDurationSeconds = (file) =>
+    new Promise((resolve, reject) => {
+      try {
+        const url = URL.createObjectURL(file);
+        const audio = new Audio();
+        audio.preload = "metadata";
+        audio.src = url;
+
+        audio.onloadedmetadata = () => {
+          const d = Number(audio.duration);
+          URL.revokeObjectURL(url);
+          resolve(Number.isFinite(d) ? d : 0);
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          reject(new Error("Could not read audio metadata"));
+        };
+      } catch (e) {
+        reject(e);
+      }
+    });
+
+  const clipsOverlap = (a, b) => {
+    const aStart = a.startTime || 0;
+    const aEnd = (a.startTime || 0) + (a.duration || 0);
+    const bStart = b.startTime || 0;
+    const bEnd = (b.startTime || 0) + (b.duration || 0);
+    return Math.max(aStart, bStart) < Math.min(aEnd, bEnd);
+  };
+
+  const willOverlap = (clips, candidate) =>
+    (clips || []).some((c) => clipsOverlap(c, candidate));
+
+  const handleTrackUpload = async (trackId, file) => {
+    if (!file) return;
+
+    // 1) Upload to server-side "storage" folder
+    const { filename } = await recording.uploadStorageFile(file);
+
+    // 2) Get duration so we can size the clip on the timeline
+    const duration = await getAudioDurationSeconds(file);
+
+    // 3) Place at the current playhead time (absolute seconds)
+    const clipStartTime =
+      typeof trackModel.headTimeSeconds === "number" ? trackModel.headTimeSeconds : 0;
+
+    const newClip = {
+      id:
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      url: `${API_BASE}/storage/${filename}`,
+      duration,
+      startTime: clipStartTime,
+      image: null,
+    };
+
+    // 4) Decide if it overlaps on the requested track (using current state)
+    const targetTrack = (trackModel.tracks || []).find((t) => t.id === trackId);
+    const existingClips = targetTrack?.clips || [];
+    const overlaps = willOverlap(existingClips, newClip);
+
+    if (!overlaps) {
+      // No overlap → add to the selected track
+      trackModel.setTracks((prev) =>
+        prev.map((t) => {
+          if (t.id !== trackId) return t;
+          return { ...t, clips: [...(t.clips || []), newClip] };
+        })
+      );
+      return;
+    }
+
+    // Overlap → create a NEW track at the bottom and add the clip there
+    const newTrackId = trackModel.nextTrackId;
+
+    const newTrack = {
+      id: newTrackId,
+      zoom: trackModel.globalZoom,
+      headPos: 0,
+      clips: [newClip],
+      hasRecording: false,
+      recordingUrl: null,
+      recordingDuration: 0,
+      tapeHeadPos: 0,
+      recordingImage: null,
+      clipStartPos: 0,
+    };
+
+    trackModel.setTracks((prev) => [...prev, newTrack]);
+    trackModel.setNextTrackId((id) => id + 1);
+
+    trackModel.setSelectedTrackId(newTrackId);
+  };
+
+
   // --- Keyboard handlers (computer keyboard → piano keys) ---
   // NOTE: if you had keydown/keyup listeners in the old monolithic hook,
   // you probably moved them to the page component or elsewhere.
@@ -183,6 +281,10 @@ export function useInstrumentPageLogic() {
     // ===== Recording controls + recordings list =====
     recordings: recording.recordings,
     recordingsError: recording.recordingsError,
+    storageFiles: recording.storageFiles,
+    storageError: recording.storageError,
+    handleTrackUpload,
+
     handleTrackRecordToggle: recording.handleTrackRecordToggle,
     handleRoomRecordToggle: recording.handleRoomRecordToggle,
     isRoomRecording: recording.isRoomRecording,

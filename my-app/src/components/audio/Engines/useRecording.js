@@ -40,6 +40,9 @@ export function useRecording({
   // UI state
   const [recordings, setRecordings] = useState([]);
   const [recordingsError, setRecordingsError] = useState(null);
+  const [storageFiles, setStorageFiles] = useState([]);
+  const [storageError, setStorageError] = useState(null);
+
   const [isRoomRecording, setIsRoomRecording] = useState(false);
 
   // Internal refs for recording session
@@ -95,8 +98,61 @@ export function useRecording({
     }
   };
 
+  const fetchStorage = async () => {
+    try {
+      setStorageError(null);
+
+      const res = await fetch(`${API_BASE}/api/storage`);
+
+      // If the backend doesn't support storage yet, treat it like "no files"
+      if (res.status === 404) {
+        setStorageFiles([]);
+        setStorageError(null);
+        return;
+      }
+
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      const data = await res.json();
+      setStorageFiles(Array.isArray(data.storage) ? data.storage : []);
+    } catch (err) {
+      setStorageFiles([]);
+      // Only show a real error if it's not a missing route
+      setStorageError(err?.message || String(err));
+    }
+  };
+
+
+  const uploadStorageFile = async (file) => {
+    if (!file) throw new Error("No file provided");
+
+    const formData = new FormData();
+    formData.append("clip", file); // must match server field name
+
+    const res = await fetch(`${API_BASE}/api/storage/upload`, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+
+      const cleanMessage =
+        text.includes("Cannot POST")
+          ? "Upload route not found on backend (POST /api/storage/upload). Check API_BASE and server routes."
+          : text || `Upload failed (HTTP ${res.status})`;
+
+      throw new Error(cleanMessage);
+    }
+
+    const data = await res.json(); // { filename }
+    fetchStorage(); // refresh library list
+    return data;
+  };
+
   useEffect(() => {
     fetchRecordings();
+    fetchStorage();
   }, []);
 
   // ----- create MediaRecorder when audio engine is ready -----
@@ -377,8 +433,14 @@ export function useRecording({
   return {
     recordings,
     recordingsError,
+
+    storageFiles,
+    storageError,
+    uploadStorageFile,
+
     isRoomRecording,
     handleTrackRecordToggle,
     handleRoomRecordToggle,
   };
+
 }

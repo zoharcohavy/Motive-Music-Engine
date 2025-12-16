@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useRef } from "react";
 
 const BASE_STRIP_SECONDS = 10;
 const MIN_TIMELINE_SECONDS = 120; // 2 minutes: makes Scroll usable on page load
@@ -55,6 +55,7 @@ export default function TrackSection({
   addTrack,
   deleteTrack,
   handleTrackRecordToggle,
+  handleTrackUpload,
   activeRecordingTrackId,
   mouseMode,
   handleTrackStripMouseDown,
@@ -62,6 +63,7 @@ export default function TrackSection({
   handleTrackStripContextMenu,
   trackCanvasRefs,
 }) {
+  const fileInputRefs = useRef({});
   const hasTracks = tracks && tracks.length > 0;
   const firstTrack = hasTracks ? tracks[0] : null;
   const currentTimeSeconds =
@@ -227,6 +229,32 @@ const headLeftPercent = clamped * 100;
               >
                 Rec
               </button>
+              <button
+                type="button"
+                className="btn trackSection__uploadBtn"
+                onClick={() => fileInputRefs.current[track.id]?.click()}
+                title="Add an audio file clip to this track"
+              >
+                +Audio
+              </button>
+
+              <input
+                type="file"
+                accept="audio/*"
+                style={{ display: "none" }}
+                ref={(el) => {
+                  if (!fileInputRefs.current) fileInputRefs.current = {};
+                  if (el) fileInputRefs.current[track.id] = el;
+                }}
+                onChange={(e) => {
+                  const f = e.target.files && e.target.files[0];
+                  if (f && typeof handleTrackUpload === "function") {
+                    handleTrackUpload(track.id, f);
+                  }
+                  e.target.value = "";
+                }}
+              />
+
 
 
 
