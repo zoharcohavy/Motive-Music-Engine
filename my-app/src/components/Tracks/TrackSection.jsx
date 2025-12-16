@@ -44,7 +44,6 @@ export default function TrackSection({
   tracks,
   viewStartTime,
   setViewStartTime,
-  setViewStartTimeAndSnapHead,
   headTimeSeconds,
   selectedTrackId,
   setSelectedTrackId,
@@ -53,11 +52,9 @@ export default function TrackSection({
 
   handleGlobalPlay,
   addTrack,
-  deleteTrack,
   handleTrackRecordToggle,
   handleTrackUpload,
   activeRecordingTrackId,
-  mouseMode,
   handleTrackStripMouseDown,
   handleTrackStripMouseMove,
   handleTrackStripContextMenu,
@@ -174,7 +171,16 @@ const headLeftPercent = clamped * 100;
 
           // ✅ make sure scroll range includes where the tapehead currently is
           const head = Number.isFinite(headTimeSeconds) ? headTimeSeconds : 0;
-          const effectiveEnd = Math.max(baseEnd, head + visibleSeconds);
+          // Chunked timeline growth:
+          // currentEnd snaps to a 2-minute boundary (min 2:00)
+          const CHUNK = 120; // 2 minutes
+          const BUFFER = 10; // grow when within last 10s
+
+          const snappedEnd = Math.max(CHUNK, Math.ceil(Math.max(baseEnd, head) / CHUNK) * CHUNK);
+
+          // If head is within the last 10s of the current chunk, grow by +2 minutes
+          const effectiveEnd = head >= snappedEnd - BUFFER ? snappedEnd + CHUNK : snappedEnd;
+
 
           return Math.max(0, effectiveEnd - visibleSeconds);
         })()}
