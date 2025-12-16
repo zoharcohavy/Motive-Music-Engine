@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { KEYS } from "../../../components/audio/constants";
 
 export default function PianoKeyboard({

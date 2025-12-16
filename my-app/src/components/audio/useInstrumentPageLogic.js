@@ -259,9 +259,7 @@ export function useInstrumentPageLogic() {
     globalZoom: trackModel.globalZoom,
     changeZoom: trackModel.changeZoom,
     handleGlobalPlay: trackModel.handleGlobalPlay,
-    handleTrackStripMouseDown: trackModel.handleTrackStripMouseDown,
-    handleTrackStripMouseMove: trackModel.handleTrackStripMouseMove,
-    handleTrackStripContextMenu: trackModel.handleTrackStripContextMenu,
+    mouse_interactions: trackModel.mouse_interactions,
     moveClip: trackModel.moveClip,
 
     // ===== Tracks =====

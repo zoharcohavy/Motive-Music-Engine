@@ -1,4 +1,3 @@
-import React from "react";
 import { useInstrumentPageLogic } from "../components/audio/useInstrumentPageLogic";
 import RecordingsPanel from "../components/audio/Engines/RecordingsPanel";
 import TopControls from "../components/Controls/TopControls";
@@ -45,9 +44,7 @@ export default function InstrumentPage({ instrument }) {
     handleTrackRecordToggle,
     activeRecordingTrackId,
 
-    handleTrackStripMouseDown,
-    handleTrackStripMouseMove,
-    handleTrackStripContextMenu,
+    mouse_interactions,
     trackCanvasRefs,
 
     activeKeyIds,
@@ -182,9 +179,7 @@ export default function InstrumentPage({ instrument }) {
         handleTrackRecordToggle={handleTrackRecordToggle}
         handleTrackUpload={handleTrackUpload}
         activeRecordingTrackId={activeRecordingTrackId}
-        handleTrackStripMouseDown={handleTrackStripMouseDown}
-        handleTrackStripMouseMove={handleTrackStripMouseMove}
-        handleTrackStripContextMenu={handleTrackStripContextMenu}
+        mouse_interactions={mouse_interactions}
         trackCanvasRefs={trackCanvasRefs}
       />
 

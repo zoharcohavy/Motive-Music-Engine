@@ -1,5 +1,3 @@
-import React from "react";
-
 export default function MouseModeToggle({ mouseMode, setMouseMode }) {
   return (
     <div className="mouseMode">

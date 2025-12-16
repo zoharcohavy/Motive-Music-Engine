@@ -419,6 +419,44 @@ export function useTrackModel(options = {}) {
     draggingClipRef.current = null;
   };
 
+  // Unified pointer-based mouse interactions for track strips.
+  // TrackSection should use these instead of individual mouse handlers.
+  const mouse_interactions = {
+    onPointerDown: (trackId, e) => {
+      // Always select the track you interact with
+      setSelectedTrackId(trackId);
+
+      // Capture pointer so dragging continues even if you leave the canvas
+      try {
+        e.currentTarget?.setPointerCapture?.(e.pointerId);
+      } catch (_) {}
+
+      handleTrackStripMouseDown(trackId, e);
+    },
+
+    onPointerMove: (trackId, e) => {
+      handleTrackStripMouseMove(trackId, e);
+    },
+
+    onPointerUp: (trackId, e) => {
+      stopDragging();
+      try {
+        e.currentTarget?.releasePointerCapture?.(e.pointerId);
+      } catch (_) {}
+    },
+
+    onPointerCancel: (trackId, e) => {
+      stopDragging();
+      try {
+        e.currentTarget?.releasePointerCapture?.(e.pointerId);
+      } catch (_) {}
+    },
+
+    onContextMenu: (trackId, e) => {
+      handleTrackStripContextMenu(trackId, e);
+    },
+  };
+
   useEffect(() => {
     const handleUp = () => stopDragging();
     window.addEventListener("mouseup", handleUp);
@@ -620,6 +658,7 @@ if (track.clips && track.clips.length > 0) {
     handleTrackStripMouseMove,
     handleTrackStripContextMenu,
     stopDragging,
+    mouse_interactions,
 
     handleGlobalPlay,
     toggleTransportPlay,
