@@ -216,6 +216,7 @@ export function useInstrumentPageLogic() {
 
     const newTrack = {
       id: newTrackId,
+      name: String(newTrackId),
       zoom: trackModel.globalZoom,
       headPos: 0,
       clips: [newClip],
@@ -225,6 +226,7 @@ export function useInstrumentPageLogic() {
       tapeHeadPos: 0,
       recordingImage: null,
       clipStartPos: 0,
+      heightPx: trackModel.DEFAULT_TRACK_HEIGHT_PX,
     };
 
     trackModel.setTracks((prev) => [...prev, newTrack]);
@@ -272,6 +274,13 @@ export function useInstrumentPageLogic() {
     selectedTrackId: trackModel.selectedTrackId,
     setSelectedTrackId: trackModel.setSelectedTrackId,
     addTrack: trackModel.addTrack,
+    deleteTrack: trackModel.deleteTrack,
+    renameTrack: trackModel.renameTrack,
+    setTrackHeightPx: trackModel.setTrackHeightPx,
+    DEFAULT_TRACK_HEIGHT_PX: trackModel.DEFAULT_TRACK_HEIGHT_PX,
+    MIN_TRACK_HEIGHT_PX: trackModel.MIN_TRACK_HEIGHT_PX,
+    MAX_TRACK_HEIGHT_PX: trackModel.MAX_TRACK_HEIGHT_PX,
+
     activeRecordingTrackId: trackModel.activeRecordingTrackId,
 
     // ===== Recording controls + recordings list =====

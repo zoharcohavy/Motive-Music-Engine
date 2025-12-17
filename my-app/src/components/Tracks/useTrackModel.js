@@ -32,7 +32,12 @@ export function useTrackModel(options = {}) {
     },
   ]);
 
+  // Track UI sizing
   const BASE_STRIP_SECONDS = 10;
+  const DEFAULT_TRACK_HEIGHT_PX = 84; // matches current feel
+  const MIN_TRACK_HEIGHT_PX = 34;
+  const MAX_TRACK_HEIGHT_PX = 220;
+
   const [nextTrackId, setNextTrackId] = useState(1);
   const [globalZoom, setGlobalZoom] = useState(1);
   const [viewStartTime, setViewStartTime] = useState(0); // left edge in seconds
@@ -101,10 +106,12 @@ export function useTrackModel(options = {}) {
   // ---------- Public actions ----------
 
   const addTrack = () => {
+    const id = nextTrackId;
     setTracks((prev) => [
       ...prev,
       {
         id: nextTrackId,
+        name: String(id),
         zoom: globalZoom,
         headPos: 0,
         clips: [],
@@ -114,21 +121,11 @@ export function useTrackModel(options = {}) {
         tapeHeadPos: 0,
         recordingImage: null,
         clipStartPos: 0,
+        heightPx: DEFAULT_TRACK_HEIGHT_PX,
       },
     ]);
     setNextTrackId((id) => id + 1);
   };
-
-  const deleteTrack = (trackId) => {
-    // Remove the track from the list
-    setTracks((prevTracks) => prevTracks.filter((t) => t.id !== trackId));
-
-    // If this track was armed for recording, clear that
-    setActiveRecordingTrackId((prevActive) =>
-      prevActive === trackId ? null : prevActive
-    );
-  };
-
 
   // change global zoom; all tracks share the same zoom
   const changeZoom = (delta) => {
@@ -545,10 +542,30 @@ if (track.clips && track.clips.length > 0) {
     if (startX + clipWidth < 0 || startX > width) return;
 
     const x = startX;
-    const y = 4;
     const w = clipWidth;
-    const h = height - 8;
     const radius = 4;
+
+    // ===== Clip height behavior =====
+    // Normal clip height stays the same until the track gets too small.
+    // Only then do clips shrink to fit the available track height.
+    const PADDING_Y = 4;
+    const availableH = Math.max(0, height - PADDING_Y * 2);
+
+    // Keep your current "normal" look (this is the max clip height when track is tall enough)
+    const NORMAL_CLIP_H = 42;
+
+    // Threshold: if the track is at least this tall, clip stays NORMAL_CLIP_H.
+    // (42px clip + 8px padding + a little breathing room)
+    const SHRINK_THRESHOLD = 58;
+
+    const clipH =
+      height >= SHRINK_THRESHOLD
+        ? Math.min(NORMAL_CLIP_H, availableH)
+        : Math.max(8, availableH);
+
+    const y = Math.round((height - clipH) / 2);
+    const h = clipH;
+
 
     // --- 1) White outlined box ---
     ctx.save();
@@ -584,8 +601,8 @@ if (track.clips && track.clips.length > 0) {
       drawRoundedRect(ctx, x, y, w, h, radius);
       ctx.clip();
 
-      ctx.translate(startX, 0);
-      drawGenericWave(ctx, clipWidth, height, 0.9);
+      ctx.translate(startX, y);
+      drawGenericWave(ctx, clipWidth, h, 0.9);
 
       ctx.restore();
     }
@@ -618,6 +635,34 @@ if (track.clips && track.clips.length > 0) {
     });
     }, [tracks, viewStartTime, headTimeSeconds, globalZoom]);
 
+
+    const deleteTrack = (trackId) => {
+      setTracks((prev) => {
+        const next = prev.filter((t) => t.id !== trackId);
+        return next.length ? next : prev; // don't allow deleting last track
+      });
+
+      // If user deleted the currently selected track, select the first remaining track
+      setSelectedTrackId((prevSelected) => {
+        if (prevSelected !== trackId) return prevSelected;
+        const remaining = tracksRef.current?.filter((t) => t.id !== trackId) || [];
+        return remaining[0]?.id ?? null;
+      });
+    };
+
+    const renameTrack = (trackId, nextName) => {
+      const cleaned = (nextName ?? "").trim();
+      setTracks((prev) =>
+        prev.map((t) => (t.id === trackId ? { ...t, name: cleaned } : t))
+      );
+    };
+
+    const setTrackHeightPx = (trackId, heightPx) => {
+      const h = Math.max(MIN_TRACK_HEIGHT_PX, Math.min(MAX_TRACK_HEIGHT_PX, Math.round(heightPx)));
+      setTracks((prev) =>
+        prev.map((t) => (t.id === trackId ? { ...t, heightPx: h } : t))
+      );
+    };
 
   // ---------- Return API ----------
   return {
@@ -652,6 +697,12 @@ if (track.clips && track.clips.length > 0) {
     // actions
     addTrack,
     deleteTrack,
+    renameTrack,
+    setTrackHeightPx,
+    DEFAULT_TRACK_HEIGHT_PX,
+    MIN_TRACK_HEIGHT_PX,
+    MAX_TRACK_HEIGHT_PX,
+
     changeZoom,
     moveClip,
     handleTrackStripMouseDown,
