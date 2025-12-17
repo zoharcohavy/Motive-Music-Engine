@@ -41,6 +41,13 @@ export default function InstrumentPage({ instrument }) {
     changeZoom,
     handleGlobalPlay,
     addTrack,
+    deleteTrack,
+    renameTrack,
+    setTrackHeightPx,
+    DEFAULT_TRACK_HEIGHT_PX,
+    MIN_TRACK_HEIGHT_PX,
+    MAX_TRACK_HEIGHT_PX,
+
     handleTrackRecordToggle,
     activeRecordingTrackId,
 
@@ -76,6 +83,11 @@ export default function InstrumentPage({ instrument }) {
   const [isMouseModeOpen, setIsMouseModeOpen] = usePersistedState(
     "ui.instrumentPage.mouseModeOpen",
     false
+  );
+
+  const [trackControlsWidth, setTrackControlsWidth] = usePersistedState(
+    "ui.trackControlsWidth",
+    96
   );
 
 
@@ -176,6 +188,17 @@ export default function InstrumentPage({ instrument }) {
         changeZoom={changeZoom}
         handleGlobalPlay={handleGlobalPlay}
         addTrack={addTrack}
+        deleteTrack={deleteTrack}
+        renameTrack={renameTrack}
+        setTrackHeightPx={setTrackHeightPx}
+
+        trackControlsWidth={trackControlsWidth}
+        setTrackControlsWidth={setTrackControlsWidth}
+
+        DEFAULT_TRACK_HEIGHT_PX={DEFAULT_TRACK_HEIGHT_PX}
+        MIN_TRACK_HEIGHT_PX={MIN_TRACK_HEIGHT_PX}
+        MAX_TRACK_HEIGHT_PX={MAX_TRACK_HEIGHT_PX}
+
         handleTrackRecordToggle={handleTrackRecordToggle}
         handleTrackUpload={handleTrackUpload}
         activeRecordingTrackId={activeRecordingTrackId}
