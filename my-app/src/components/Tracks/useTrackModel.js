@@ -423,13 +423,18 @@ export function useTrackModel(options = {}) {
       // Always select the track you interact with
       setSelectedTrackId(trackId);
 
-      // Capture pointer so dragging continues even if you leave the canvas
-      try {
-        e.currentTarget?.setPointerCapture?.(e.pointerId);
-      } catch (_) {}
+      // IMPORTANT:
+      // Do NOT pointer-capture in "clip" mode, otherwise pointermove will keep firing
+      // on the original track and you can’t move clips between tracks.
+      if (mouseMode !== "clip") {
+        try {
+          e.currentTarget?.setPointerCapture?.(e.pointerId);
+        } catch (_) {}
+      }
 
       handleTrackStripMouseDown(trackId, e);
     },
+
 
     onPointerMove: (trackId, e) => {
       handleTrackStripMouseMove(trackId, e);
@@ -456,11 +461,20 @@ export function useTrackModel(options = {}) {
 
   useEffect(() => {
     const handleUp = () => stopDragging();
+
     window.addEventListener("mouseup", handleUp);
     window.addEventListener("mouseleave", handleUp);
+
+    // Pointer events (more reliable with pointer-based dragging)
+    window.addEventListener("pointerup", handleUp);
+    window.addEventListener("pointercancel", handleUp);
+
     return () => {
       window.removeEventListener("mouseup", handleUp);
       window.removeEventListener("mouseleave", handleUp);
+
+      window.removeEventListener("pointerup", handleUp);
+      window.removeEventListener("pointercancel", handleUp);
     };
   }, []);
 
@@ -552,16 +566,11 @@ if (track.clips && track.clips.length > 0) {
     const availableH = Math.max(0, height - PADDING_Y * 2);
 
     // Keep your current "normal" look (this is the max clip height when track is tall enough)
-    const NORMAL_CLIP_H = 42;
+    const MIN_CLIP_H = 8;
+    const MAX_CLIP_H = 160; // cap so giant tracks don’t look ridiculous
 
-    // Threshold: if the track is at least this tall, clip stays NORMAL_CLIP_H.
-    // (42px clip + 8px padding + a little breathing room)
-    const SHRINK_THRESHOLD = 58;
+    const clipH = Math.min(MAX_CLIP_H, Math.max(MIN_CLIP_H, availableH));
 
-    const clipH =
-      height >= SHRINK_THRESHOLD
-        ? Math.min(NORMAL_CLIP_H, availableH)
-        : Math.max(8, availableH);
 
     const y = Math.round((height - clipH) / 2);
     const h = clipH;
