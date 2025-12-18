@@ -259,16 +259,20 @@ export function useTransport({
             if (!activeMap.has(key)) {
               // New active clip at this headTime
               const audio = new Audio(clip.url);
-              const offset = Math.max(0, headTime - clipStart);
+              const withinClip = Math.max(0, headTime - clipStart);
+              const desiredTime = (clip.offset || 0) + withinClip;
 
               const startAudioAtOffset = () => {
                 try {
-                  const dur = audio.duration || clip.duration || 0;
-                  const offsetFrac = dur > 0 ? offset / dur : 0;
-                  audio.currentTime = offsetFrac * dur;
+                  const dur = audio.duration || 0;
+                  if (dur > 0) {
+                    // clamp slightly under end to avoid "out of range" issues
+                    audio.currentTime = Math.min(desiredTime, Math.max(0, dur - 0.01));
+                  }
                 } catch (e) {
                   // ignore
                 }
+
                 audio.play().catch(() => {});
               };
 

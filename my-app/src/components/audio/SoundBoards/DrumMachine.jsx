@@ -1,11 +1,7 @@
 import { useState } from "react";
 import DrumImage from "../../../assets/images/DrumImage.jpeg";
 import kickSample from "../../../assets/drum_samples/kick.wav";
-// import snareSample from "../../../assets/drum_samples/snare.wav";
-// import hihatClosedSample from "../../../assets/drum_samples/hihat_closed.wav";
-// import hihatOpenSample from "../../../assets/drum_samples/hihat_open.wav";
-// import tom1Sample from "../../../assets/drum_samples/tom1.wav";
-// import tom2Sample from "../../../assets/drum_samples/tom2.wav";
+import ToolsIcon from "../../../assets/icons/tools.svg";
 
 // 16 simple pads instead of piano KEYS
 // 16 pads with placeholder sample URLs
@@ -49,16 +45,18 @@ export default function DrumKeyboard({
    return (
     <div className="drum-keypad-container">
       <div className="drum-keypad-header">
-        <div className="drum-keypad-title">Drum keypad</div>
+        <div className="drum-keypad-title"></div>
 
         {onToggleCustomize ? (
           <button
-            type="button"
-            className="drum-keypad-customize-btn"
+            className="drumCustomizeBtn"
             onClick={onToggleCustomize}
+            title="Customize drum pads"
+            aria-label="Customize drum pads"
           >
-            {showCustomize ? "Done" : "Customize keypad"}
+            <img src={ToolsIcon} alt="" draggable={false} />
           </button>
+
         ) : null}
       </div>
 

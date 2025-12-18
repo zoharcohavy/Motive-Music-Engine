@@ -44,7 +44,7 @@ export function useTrackModel(options = {}) {
   const [headTimeSeconds, setHeadTimeSeconds] = useState(0); // absolute playhead time in seconds
   const [activeRecordingTrackId, setActiveRecordingTrackId] = useState(null);
   const [selectedTrackId, setSelectedTrackId] = useState(0);
-  const [mouseMode, setMouseMode] = useState("head"); // head | clips | delete
+  const [mouseMode, setMouseMode] = useState("head"); // head | clips | delete | cut 
   const [activeKeyIds, setActiveKeyIds] = useState([]);
 
   // ---------- Refs ----------
@@ -211,6 +211,65 @@ export function useTrackModel(options = {}) {
       );
 
       // No dragging, no head movement in delete mode
+      return;
+    }
+
+    // --- CUT MODE: split a clip where we clicked ---
+    if (mouseMode === "cut") {
+      const clickedClip = clips.find((c) => {
+        const start = c.startTime;
+        const end = c.startTime + c.duration;
+        return clickTime >= start && clickTime <= end;
+      });
+
+      if (!clickedClip) return;
+
+      const splitAbsTime = clickTime;
+      const localSplit = splitAbsTime - clickedClip.startTime;
+
+      // Avoid tiny slivers / accidental edge clicks
+      const MIN_SLICE_SECONDS = 0.05;
+      if (
+        localSplit <= MIN_SLICE_SECONDS ||
+        localSplit >= clickedClip.duration - MIN_SLICE_SECONDS
+      ) {
+        return;
+      }
+
+      const makeId =
+        typeof crypto !== "undefined" && crypto.randomUUID
+          ? () => crypto.randomUUID()
+          : () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+      const baseOffset = clickedClip.offset || 0;
+
+      const leftClip = {
+        ...clickedClip,
+        id: makeId(),
+        duration: localSplit,
+        offset: baseOffset,
+      };
+
+      const rightClip = {
+        ...clickedClip,
+        id: makeId(),
+        startTime: splitAbsTime,
+        duration: clickedClip.duration - localSplit,
+        offset: baseOffset + localSplit,
+      };
+
+      setTracks((prev) =>
+        prev.map((t) => {
+          if (t.id !== trackId) return t;
+          const next = (t.clips || [])
+            .filter((c) => c.id !== clickedClip.id)
+            .concat([leftClip, rightClip])
+            .sort((a, b) => (a.startTime || 0) - (b.startTime || 0));
+          return { ...t, clips: next };
+        })
+      );
+
+      // No dragging, no head movement in cut mode
       return;
     }
 
