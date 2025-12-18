@@ -12,27 +12,6 @@
   overflow: hidden;
 }
 
-.drumKb__inner {
-  position: relative;
-  width: 100%;
-  height: 100%;
-}
-
-.drumKb__imageWrap {
-  position: absolute;
-  left: 50%;
-  right: 50%;
-  bottom: 3%;
-  background: radial-gradient(circle at center, #555, #222);
-  opacity: 0.9;
-  z-index: 1;
-}
-
-.drumKb__image {
-  width: 50%;
-  height: 100%;
-  object-fit: cover;
-}
 .drumKb__grid {
   position: absolute;
   inset: 0;

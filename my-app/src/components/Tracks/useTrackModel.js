@@ -60,6 +60,7 @@ export function useTrackModel(options = {}) {
     handleGlobalPlay,
     toggleTransportPlay,
     isTransportPlayingRef,
+    isTransportPlaying,
   } = useTransport({
     tracksRef,
     setTracks,
@@ -723,5 +724,6 @@ if (track.clips && track.clips.length > 0) {
     handleGlobalPlay,
     toggleTransportPlay,
     isTransportPlayingRef,
+    isTransportPlaying,
   };
 }

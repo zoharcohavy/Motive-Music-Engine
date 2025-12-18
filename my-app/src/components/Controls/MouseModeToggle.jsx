@@ -1,34 +1,43 @@
+import DeleteIcon from "../../assets/icons/bin-half.svg";
+import DragIcon from "../../assets/icons/drag-hand-gesture.svg";
+import HeadIcon from "../../assets/icons/italic.svg";
+
 export default function MouseModeToggle({ mouseMode, setMouseMode }) {
   return (
-    <div className="mouseMode">
-      <span className="mouseMode__title">Mouse mode:</span>
-      <label>
-        <input
-          type="radio"
-          checked={mouseMode === "head"}
-          onChange={() => setMouseMode("head")}
-          className="mouseMode__radio"
-        />
-        Move tape head
-      </label>
-      <label>
-        <input
-          type="radio"
-          checked={mouseMode === "clip"}
-          onChange={() => setMouseMode("clip")}
-          className="mouseMode__radio"
-        />
-        Move recordings between tracks
-      </label>
-      <label>
-        <input
-          type="radio"
-          checked={mouseMode === "delete"}
-          onChange={() => setMouseMode("delete")}
-          className="mouseMode__radio"
-        />
-        Delete clips
-      </label>
+    <div className="mouseModeGrid" aria-label="Mouse mode">
+      <ModeButton
+        icon={DragIcon}
+        label="Move clips"
+        active={mouseMode === "clip"}
+        onClick={() => setMouseMode("clip")}
+      />
+      <ModeButton
+        icon={HeadIcon}
+        label="Move tape head"
+        active={mouseMode === "head"}
+        onClick={() => setMouseMode("head")}
+      />
+      <ModeButton
+        icon={DeleteIcon}
+        label="Delete"
+        active={mouseMode === "delete"}
+        onClick={() => setMouseMode("delete")}
+      />
+      <div className="mouseModeEmpty" />
     </div>
+  );
+}
+
+function ModeButton({ icon, label, active, onClick }) {
+  return (
+    <button
+      type="button"
+      className={`mouseModeBtn ${active ? "active" : ""}`}
+      onClick={onClick}
+      aria-pressed={active}
+      title={label}
+    >
+      <img src={icon} alt="" draggable={false} />
+    </button>
   );
 }

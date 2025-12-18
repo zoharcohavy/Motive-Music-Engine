@@ -1,5 +1,5 @@
 // src/components/audio/useTransport.js
-import { useRef, useEffect, useCallback } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 
 // Keep this in sync with TrackSection's BASE_STRIP_SECONDS
 const BASE_STRIP_SECONDS = 10;
@@ -49,6 +49,8 @@ export function useTransport({
   setHeadTimeSeconds,
 }) {
   const isTransportPlayingRef = useRef(false);
+  const [isTransportPlaying, setIsTransportPlaying] = useState(false);
+
   const transportAnimationFrameRef = useRef(null);
   const transportStartWallTimeRef = useRef(null);
   const transportStartHeadTimeRef = useRef(0);
@@ -80,6 +82,7 @@ export function useTransport({
     // If already playing, stop transport + audio
     if (isTransportPlayingRef.current) {
       isTransportPlayingRef.current = false;
+      setIsTransportPlaying(false);
 
       if (transportAnimationFrameRef.current) {
         cancelAnimationFrame(transportAnimationFrameRef.current);
@@ -89,6 +92,7 @@ export function useTransport({
       stopAllTransportAudio();
       return;
     }
+
 
     const tracksNow = tracksRef.current || [];
     if (!tracksNow.length) return;
@@ -119,7 +123,9 @@ export function useTransport({
 
 
     isTransportPlayingRef.current = true;
+    setIsTransportPlaying(true);
     transportStartWallTimeRef.current = performance.now();
+
     transportStartHeadTimeRef.current = startHeadTime;
     
 
@@ -134,9 +140,11 @@ export function useTransport({
       const tracksInner = tracksRef.current || [];
       if (!tracksInner.length) {
         isTransportPlayingRef.current = false;
+        setIsTransportPlaying(false);
         stopAllTransportAudio();
         return;
       }
+
 
       const zoomInner = (tracksInner[0] && tracksInner[0].zoom) || 1;
       const trackLengthInner = BASE_STRIP_SECONDS / zoomInner;
@@ -160,9 +168,11 @@ export function useTransport({
 
       if (reachedEnd) {
         isTransportPlayingRef.current = false;
+        setIsTransportPlaying(false);
         stopAllTransportAudio();
         return;
       }
+
 
 
       if (typeof setHeadTimeSeconds === "function") {
@@ -336,5 +346,6 @@ export function useTransport({
     handleGlobalPlay,
     toggleTransportPlay,
     isTransportPlayingRef,
+    isTransportPlaying,
   };
 }

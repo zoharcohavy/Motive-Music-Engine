@@ -152,6 +152,3 @@ select:focus, button:focus, input:focus {
   padding: 0.15rem 0.35rem !important;
   border-radius: 8px;
 }
-
-
-.muted { color: var(--muted); }
