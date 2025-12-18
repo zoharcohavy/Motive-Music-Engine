@@ -261,6 +261,7 @@ export function useInstrumentPageLogic() {
     globalZoom: trackModel.globalZoom,
     changeZoom: trackModel.changeZoom,
     handleGlobalPlay: trackModel.handleGlobalPlay,
+    isTransportPlaying: trackModel.isTransportPlaying,
     mouse_interactions: trackModel.mouse_interactions,
     moveClip: trackModel.moveClip,
 

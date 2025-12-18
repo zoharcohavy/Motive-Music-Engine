@@ -81,23 +81,120 @@
   gap: 0.75rem;
 }
 
-.mouseMode {
-  margin-top: 0.5rem;
-  margin-bottom: 0.25rem;
-  font-size: 0.8rem;
-  color: rgba(232, 244, 242, 0.92);
+.mouseModeCard {
+  width: fit-content;
+  height: fit-content;
+
+  padding: 2px;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-}
+  justify-content: center;
 
-.mouseMode__title {
-  font-weight: 500;
-}
-
-.mouseMode__radio {
-  margin-right: 0.25rem;
+  background: transparent;
+  border: none;
 }
 
 
 
+/* 2x2 grid */
+.mouseModeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 44px);
+  grid-template-rows: repeat(2, 44px);
+  gap: 6px;
+}
+
+/* Blue-tinted neutral button */
+.mouseModeBtn {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 170, 255, 0.35);
+  background: linear-gradient(
+    180deg,
+    rgba(245, 248, 255, 0.92),
+    rgba(220, 230, 255, 0.86)
+  );
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+
+  transition: background 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.mouseModeBtn:hover {
+  border-color: rgba(120, 170, 255, 0.65);
+  box-shadow: 0 0 0 2px rgba(120, 170, 255, 0.18);
+}
+
+/* Noticeable green selection */
+.mouseModeBtn.active {
+  background: linear-gradient(180deg, #9be7b0, #5bcf8e);
+  border-color: #3fa86c;
+  box-shadow: none;
+}
+
+
+.mouseModeBtn.active:hover {
+  animation-play-state: paused;
+}
+
+
+/* Icon rendering */
+.mouseModeBtn img {
+  width: 20px;
+  height: 20px;
+  filter: brightness(0) saturate(100%);
+}
+
+.mouseModeBtn.active img {
+  filter: brightness(0) invert(1);
+}
+
+/* Empty 4th slot */
+.mouseModeEmpty {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px dashed rgba(120, 170, 255, 0.25);
+}
+/* --- Mouse Mode (icon grid) --- */
+
+.mouseModeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 44px);
+  grid-template-rows: repeat(2, 44px);
+  gap: 6px;
+  width: fit-content;
+  height: fit-content;
+}
+
+.mouseModeBtn {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid rgba(120, 170, 255, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+
+  position: relative; /* needed for halo */
+}
+
+.mouseModeBtn img {
+  width: 20px;
+  height: 20px;
+  filter: brightness(0) saturate(100%);
+}
+
+
+
+
+/* Remove the global focus halo ONLY for mouse mode buttons */
+.mouseModeBtn:focus,
+.mouseModeBtn:focus-visible {
+  outline: none;
+}

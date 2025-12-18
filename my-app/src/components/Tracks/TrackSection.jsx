@@ -51,6 +51,7 @@ export default function TrackSection({
   changeZoom,
 
   handleGlobalPlay,
+  isTransportPlaying,
   addTrack,
   deleteTrack,
   renameTrack,
@@ -198,8 +199,9 @@ export default function TrackSection({
     className="btn btn-primary"
     onClick={() => revealThen(handleGlobalPlay)}
   >
-    ▶ Play
+    {isTransportPlaying ? "⏸ Pause" : "▶ Play"}
   </button>
+
 
 <button className="btn" onClick={addTrack}>
     + Track

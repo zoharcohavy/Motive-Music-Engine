@@ -3,11 +3,11 @@ import { useEffect } from "react";
 
 /**
  * Unified hotkeys:
- * - Space = play/pause (or play from tapehead)
+ * - Space = play/pause
  * - Enter = toggle recording on selected track
- * - Any single character = trigger instrument key/pad via triggerChar(charLower)
+ * - Any single character = trigger instrument mapping
  *
- * Best practice: do NOT hijack typing in inputs/textarea/contenteditable.
+ * Does not hijack typing in inputs/textarea/contenteditable.
  */
 export function useInstrumentHotkeys({ onPlay, onToggleRecord, triggerChar }) {
   useEffect(() => {
@@ -17,22 +17,23 @@ export function useInstrumentHotkeys({ onPlay, onToggleRecord, triggerChar }) {
         return;
       }
 
+      // Space toggles transport
       if (e.code === "Space") {
         e.preventDefault();
         onPlay?.();
         return;
       }
 
+      // Enter toggles recording
       if (e.key === "Enter") {
         e.preventDefault();
         onToggleRecord?.();
         return;
       }
 
-      // single character triggers instrument mapping
+      // Single character triggers instrument mapping
       if (e.key && e.key.length === 1) {
-        const char = e.key.toLowerCase();
-        triggerChar?.(char);
+        triggerChar?.(e.key.toLowerCase());
       }
     };
 

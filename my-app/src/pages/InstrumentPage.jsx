@@ -53,6 +53,8 @@ export default function InstrumentPage({ instrument }) {
 
     handleTrackRecordToggle,
     activeRecordingTrackId,
+    isTransportPlaying,
+
 
     mouse_interactions,
     trackCanvasRefs,
@@ -91,11 +93,6 @@ export default function InstrumentPage({ instrument }) {
       "ui.instrumentPage.recPanelOpen",
       true
     );
-
-  const [isMouseModeOpen, setIsMouseModeOpen] = usePersistedState(
-    "ui.instrumentPage.mouseModeOpen",
-    false
-  );
 
   const [trackControlsWidth, setTrackControlsWidth] = usePersistedState(
     "ui.trackControlsWidth",
@@ -172,19 +169,11 @@ export default function InstrumentPage({ instrument }) {
       </CollapsibleNotice>
 
       {/* Mouse mode (collapsible) */}
-      <CollapsibleNotice
-        title="Mouse mode"
-        subtitle="(advanced)"
-        isOpen={isMouseModeOpen}
-        setIsOpen={setIsMouseModeOpen}
-        className="notice--mini"
-      >
-        <div className="card">
-          <MouseModeToggle mouseMode={mouseMode} setMouseMode={setMouseMode} />
-        </div>
-      </CollapsibleNotice>
-
-
+      {/* Mouse mode */}
+      <div className="card mouseModeCard">
+        <MouseModeToggle mouseMode={mouseMode} setMouseMode={setMouseMode} />
+      </div>
+ 
       {/* Tracks */}
       <TrackSection
         tracks={tracks}
@@ -196,6 +185,7 @@ export default function InstrumentPage({ instrument }) {
         globalZoom={globalZoom}
         changeZoom={changeZoom}
         handleGlobalPlay={handleGlobalPlay}
+        isTransportPlaying={isTransportPlaying}
         addTrack={addTrack}
         deleteTrack={deleteTrack}
         renameTrack={renameTrack}
