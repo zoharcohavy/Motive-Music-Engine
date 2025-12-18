@@ -1,6 +1,8 @@
 import DeleteIcon from "../../assets/icons/bin-half.svg";
 import DragIcon from "../../assets/icons/drag-hand-gesture.svg";
 import HeadIcon from "../../assets/icons/italic.svg";
+import CutIcon from "../../assets/icons/cut.svg";
+
 
 export default function MouseModeToggle({ mouseMode, setMouseMode }) {
   return (
@@ -23,7 +25,12 @@ export default function MouseModeToggle({ mouseMode, setMouseMode }) {
         active={mouseMode === "delete"}
         onClick={() => setMouseMode("delete")}
       />
-      <div className="mouseModeEmpty" />
+      <ModeButton
+        icon={CutIcon}
+        label="Cut clip"
+        active={mouseMode === "cut"}
+        onClick={() => setMouseMode("cut")}
+      />
     </div>
   );
 }
