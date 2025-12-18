@@ -10,25 +10,25 @@ import kickSample from "../../../assets/drum_samples/kick.wav";
 // 16 simple pads instead of piano KEYS
 // 16 pads with placeholder sample URLs
 export const DRUM_PADS = [
-  { id: 0,  name: "k",   sampleUrl: kickSample },
-  { id: 1,  name: "m",  sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 2,  name: "HiHat C",  sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 3,  name: "HiHat O",  sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 0,  name: "",   sampleUrl: kickSample },
+  { id: 1,  name: "",  sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 2,  name: "",  sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 3,  name: "",  sampleUrl: "../assets/drum_samples/kick.wav" },
 
-  { id: 4,  name: "Kick 2",   sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 5,  name: "Snare 2",  sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 6,  name: "Tom 1",    sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 7,  name: "Tom 2",    sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 4,  name: "",   sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 5,  name: "",  sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 6,  name: "",    sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 7,  name: "",    sampleUrl: "../assets/drum_samples/kick.wav" },
 
-  { id: 8,  name: "Clap",     sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 9,  name: "Rim",      sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 10, name: "Perc 1",   sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 11, name: "Perc 2",   sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 8,  name: "",     sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 9,  name: "",      sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 10, name: "",   sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 11, name: "",   sampleUrl: "../assets/drum_samples/kick.wav" },
 
-  { id: 12, name: "FX 1",     sampleUrl: "/audio/drums/fx-1.mp3" },
-  { id: 13, name: "FX 2",     sampleUrl: "/audio/drums/fx-2.mp3" },
-  { id: 14, name: "FX 3",     sampleUrl: "/audio/drums/fx-3.mp3" },
-  { id: 15, name: "FX 4",     sampleUrl: "/audio/drums/fx-4.mp3" },
+  { id: 12, name: "",     sampleUrl: "/audio/drums/fx-1.mp3" },
+  { id: 13, name: "",     sampleUrl: "/audio/drums/fx-2.mp3" },
+  { id: 14, name: "",     sampleUrl: "/audio/drums/fx-3.mp3" },
+  { id: 15, name: "",     sampleUrl: "/audio/drums/fx-4.mp3" },
 ];
 
 
@@ -37,30 +37,46 @@ export default function DrumKeyboard({
   activeKeyIds = [],
   onMouseDownKey,
   onMouseEnterKey,
+  getCharForPadId,
+  showCustomize,
+  onToggleCustomize,
 }) {
   const [isMouseDown, setIsMouseDown] = useState(false);
 
   const isActive = (padId) =>
     Array.isArray(activeKeyIds) && activeKeyIds.includes(padId);
 
-  return (
-    <div
-      className="drumKb"
-      onMouseUp={() => setIsMouseDown(false)}
-      onMouseLeave={() => setIsMouseDown(false)}
-    >
-      <div className="drumKb__inner">
-        {/* DRUM IMAGE PLACEHOLDER */}
-        <div className="drumKb__imageWrap">
-          <img
-            src={DrumImage}
-            alt="Drum"
-            className="drumKb__image"
-          />
-        </div>
+   return (
+    <div className="drum-keypad-container">
+      <div className="drum-keypad-header">
+        <div className="drum-keypad-title">Drum keypad</div>
 
-        {/* 4x4 DRUM PAD GRID OVER THE IMAGE */}
-        <div className="drumKb__grid">
+        {onToggleCustomize ? (
+          <button
+            type="button"
+            className="drum-keypad-customize-btn"
+            onClick={onToggleCustomize}
+          >
+            {showCustomize ? "Done" : "Customize keypad"}
+          </button>
+        ) : null}
+      </div>
+
+      {/* This wrapper MUST be position: relative in CSS */}
+      <div className="drumKb__wrap">
+        <img className="drumKb__img" src={DrumImage} alt="Drum pad" />
+
+        {/* Keep only ONE overlay grid wrapper */}
+        <div
+          className="drumKb__grid"
+          onMouseDown={(e) => {
+            // Allow drag-across triggering
+            e.preventDefault();
+            setIsMouseDown(true);
+          }}
+          onMouseUp={() => setIsMouseDown(false)}
+          onMouseLeave={() => setIsMouseDown(false)}
+        >
           {pads.map((pad) => (
             <button
               key={pad.id}
@@ -74,10 +90,20 @@ export default function DrumKeyboard({
                   onMouseEnterKey(pad);
                 }
               }}
-              className={`drumKb__pad ${isActive(pad.id) ? "drumKb__pad--active" : ""}`}
+              className={`drumKb__pad ${
+                isActive(pad.id) ? "drumKb__pad--active" : ""
+              }`}
             >
-
-              {pad.name}
+              {(() => {
+                const ch = getCharForPadId ? getCharForPadId(pad.id) : "";
+                const pretty =
+                  ch === " "
+                    ? "SPACE"
+                    : ch === "enter"
+                    ? "ENTER"
+                    : (ch || "").toUpperCase();
+                return ch ? `[${pretty}] ${pad.name}` : pad.name;
+              })()}
             </button>
           ))}
         </div>

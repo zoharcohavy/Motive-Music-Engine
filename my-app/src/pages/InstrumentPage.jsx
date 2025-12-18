@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useInstrumentPageLogic } from "../components/audio/useInstrumentPageLogic";
 import RecordingsPanel from "../components/audio/Engines/RecordingsPanel";
 import TopControls from "../components/Controls/TopControls";
@@ -13,6 +14,8 @@ import { useInstrumentHotkeys } from "../components/audio/SoundBoards/useInstrum
 import { useDrumPadConfig } from "../components/audio/SoundBoards/useDrumPadConfig";
 import { usePersistedState } from "../components/ui/usePersistedState";
 import CollapsibleNotice from "../components/ui/CollapsibleNotice";
+import DrumPadCustomizer from "../components/audio/SoundBoards/DrumPadCustomizer";
+
 
 
 export default function InstrumentPage({ instrument }) {
@@ -70,6 +73,15 @@ export default function InstrumentPage({ instrument }) {
     isRoomRecording,
     roomUsernames,
   } = useInstrumentPageLogic();
+
+  const isDrums = instrument === "drums";
+
+  const [showDrumCustomize, setShowDrumCustomize] = useState(false);
+
+  useEffect(() => {
+    if (!isDrums) setShowDrumCustomize(false);
+  }, [isDrums]);
+
 // Hide advanced panels by default, but remember the user's choice.
   const [isWaveformOpen, setIsWaveformOpen] = usePersistedState(
     "ui.instrumentPage.waveformOpen",
@@ -117,11 +129,8 @@ export default function InstrumentPage({ instrument }) {
     },
     triggerChar,
   });
-
-  const isDrums = instrument === "drums";
-
   return (
-    <div className="tone-test-page app-shell">
+    <div className={`tone-test-page app-shell ${isDrums ? "hasDrumDock" : ""}`}>
       {/* Recordings list in upper-right */}
       <RecordingsPanel
         isOpen={isRecPanelOpen}
@@ -208,12 +217,20 @@ export default function InstrumentPage({ instrument }) {
 
       {/* Soundboard */}
       {isDrums ? (
+        <>
         <DrumMachine
           pads={drumConfig.pads}
           activeKeyIds={activeKeyIds}
           onMouseDownKey={handleKeyMouseDown}
           onMouseEnterKey={handleKeyMouseEnter}
+          getCharForPadId={drumConfig.getCharForPadId}
+          showCustomize={showDrumCustomize}
+          onToggleCustomize={() => setShowDrumCustomize((v) => !v)}
         />
+
+        {showDrumCustomize ? <DrumPadCustomizer drumConfig={drumConfig} /> : null}
+        </>
+
       ) : (
         <PianoKeyboard
           activeKeyIds={activeKeyIds}
