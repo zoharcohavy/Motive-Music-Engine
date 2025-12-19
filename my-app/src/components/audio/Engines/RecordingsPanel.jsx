@@ -82,7 +82,7 @@ export default function RecordingsPanel({
 
             {isStorageFolderOpen ? (
               storageFiles.length === 0 ? (
-                <div className="recPanel__empty">No files yet</div>
+                <div className="recPanel__empty">None</div>
               ) : storageError ? (
                 <div className="recPanel__error">{storageError}</div>
               ) : (

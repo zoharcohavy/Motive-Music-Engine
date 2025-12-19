@@ -22,20 +22,22 @@ export function useInstrumentPageLogic() {
   // --- Room / WebSocket ---
   // Room notifies us when a remote user plays a note.
   const room = useRoom({
-    onRemoteNote: ({ freq, waveform, effect }) => {
+    onRemoteNote: ({ freq, waveform, effects, effect }) => {
       const engine = audioEngineRef.current;
       if (!engine) return;
 
       // Play the remote note through our local audio engine
       engine.playRemoteNote(freq, {
         waveform,
-        effect,
+        effects: effects ?? effect,
       });
 
+
       // Optionally sync local effect with the room’s effect
-      if (effect && typeof engine.setEffectFromRoom === "function") {
-        engine.setEffectFromRoom(effect);
+      if ((effects || effect) && typeof engine.setEffectFromRoom === "function") {
+        engine.setEffectFromRoom(effects ?? effect);
       }
+
     },
   });
 
@@ -248,8 +250,8 @@ export function useInstrumentPageLogic() {
     // ===== Audio engine / piano =====
     waveform: audioEngine.waveform,
     setWaveform: audioEngine.setWaveform,
-    effect: audioEngine.effect,
-    setEffect: audioEngine.setEffect,
+    effects: audioEngine.effects,
+    setEffects: audioEngine.setEffects,
     waveCanvasRef: audioEngine.waveCanvasRef,
     activeKeyIds: trackModel.activeKeyIds,
     handleKeyMouseDown,

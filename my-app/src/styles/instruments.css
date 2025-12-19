@@ -325,3 +325,132 @@
   height: 20px;
   filter: brightness(0) saturate(100%);
 }
+/* --- Drum Customizer Modal (tight) --- */
+.drumCustomPanel {
+  width: min(720px, 92vw);
+  max-width: 720px;
+  padding: 12px;
+}
+
+.drumCustomHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.drumCustomTitle {
+  font-size: 14px;
+  font-weight: 600;
+  opacity: 0.95;
+}
+
+.drumCustomBody {
+  max-height: 68vh;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.drumPadGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.drumPadCard {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 10px;
+  overflow: hidden;
+}
+
+/* Row: name + key button, each half */
+.drumRow {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.drumNameInput {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(120, 170, 255, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+}
+
+.drumHalfBtn {
+  flex: 1;
+  height: 32px;
+  border-radius: 8px;
+}
+
+/* Key capture */
+.drumKeyCapture {
+  width: 100%;
+  height: 30px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  padding: 0 8px;
+  border: 1px solid rgba(120, 170, 255, 0.25);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+}
+
+/* File row: square choose + filename */
+.drumFileRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drumHiddenFile {
+  display: none;
+}
+
+.drumFileBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+
+  border: 1px solid rgba(120, 170, 255, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.drumFileName {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  opacity: 0.85;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.drumCustomTopRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+/* Fits "Pad 15" tightly */
+.drumCustomPadLabel {
+  flex: 0 0 auto;
+  width: 56px;
+  white-space: nowrap;
+}
+
+/* Fits "Key: SPACE" without pushing layout */
+.drumCustomKeyBtn {
+  flex: 0 0 auto;
+  padding: 0 8px;
+  white-space: nowrap;
+}

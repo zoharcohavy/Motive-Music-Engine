@@ -1,30 +1,31 @@
 import { useState } from "react";
 import DrumImage from "../../../assets/images/DrumImage.jpeg";
 import kickSample from "../../../assets/drum_samples/kick.wav";
+import snareSample from "../../../assets/drum_samples/snare.wav";
 import ToolsIcon from "../../../assets/icons/tools.svg";
 
 // 16 simple pads instead of piano KEYS
 // 16 pads with placeholder sample URLs
 export const DRUM_PADS = [
-  { id: 0,  name: "",   sampleUrl: kickSample },
-  { id: 1,  name: "",  sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 2,  name: "",  sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 3,  name: "",  sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 0,  name: "",   sampleUrl: snareSample },
+  { id: 1,  name: "",  sampleUrl: snareSample },
+  { id: 2,  name: "",  sampleUrl: snareSample },
+  { id: 3,  name: "",  sampleUrl: snareSample },
 
-  { id: 4,  name: "",   sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 5,  name: "",  sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 6,  name: "",    sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 7,  name: "",    sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 4,  name: "",   sampleUrl: kickSample },
+  { id: 5,  name: "",  sampleUrl: kickSample },
+  { id: 6,  name: "",    sampleUrl: kickSample },
+  { id: 7,  name: "",    sampleUrl: kickSample },
 
-  { id: 8,  name: "",     sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 9,  name: "",      sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 10, name: "",   sampleUrl: "../assets/drum_samples/kick.wav" },
-  { id: 11, name: "",   sampleUrl: "../assets/drum_samples/kick.wav" },
+  { id: 8,  name: "",     sampleUrl: kickSample },
+  { id: 9,  name: "",      sampleUrl: kickSample },
+  { id: 10, name: "",   sampleUrl: kickSample },
+  { id: 11, name: "",   sampleUrl: kickSample },
 
-  { id: 12, name: "",     sampleUrl: "/audio/drums/fx-1.mp3" },
-  { id: 13, name: "",     sampleUrl: "/audio/drums/fx-2.mp3" },
-  { id: 14, name: "",     sampleUrl: "/audio/drums/fx-3.mp3" },
-  { id: 15, name: "",     sampleUrl: "/audio/drums/fx-4.mp3" },
+  { id: 12, name: "",     sampleUrl: kickSample },
+  { id: 13, name: "",     sampleUrl: kickSample },
+  { id: 14, name: "",     sampleUrl: kickSample },
+  { id: 15, name: "",     sampleUrl: kickSample },
 ];
 
 
