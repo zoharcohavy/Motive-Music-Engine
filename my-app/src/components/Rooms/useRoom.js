@@ -68,7 +68,8 @@ export function useRoom({ onRemoteNote }) {
           onRemoteNote({
             freq: msg.freq,
             waveform: msg.waveform,
-            effect: msg.effect,
+            effects: msg.effects,
+            effect: msg.effect, // keep backward compatibility
           });
           break;
         }

@@ -99,7 +99,7 @@ const storageUpload = multer({ dest: storageDir });
 
 // Upload a clip: POST /api/storage/upload (field name: "clip")
 app.post("/api/storage/upload", storageUpload.single("clip"), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+  if (!req.file) return res.status(400).json({ error: "None" });
 
   const original = req.file.originalname || "clip";
   const safeOriginal = original.replace(/[^\w.\-() ]+/g, "_");

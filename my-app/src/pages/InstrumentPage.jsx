@@ -22,8 +22,8 @@ export default function InstrumentPage({ instrument }) {
   const {
     waveform,
     setWaveform,
-    effect,
-    setEffect,
+    effects,
+    setEffects,
     recordings,
     recordingsError,
     storageFiles,
@@ -143,8 +143,8 @@ export default function InstrumentPage({ instrument }) {
       <TopControls
         waveform={waveform}
         setWaveform={setWaveform}
-        effect={effect}
-        setEffect={setEffect}
+        effects={effects}
+        setEffects={setEffects}
         showWaveform={!isDrums}
         roomId={roomId}
         roomStatus={roomStatus}
@@ -218,7 +218,11 @@ export default function InstrumentPage({ instrument }) {
           onToggleCustomize={() => setShowDrumCustomize((v) => !v)}
         />
 
-        {showDrumCustomize ? <DrumPadCustomizer drumConfig={drumConfig} /> : null}
+        <DrumPadCustomizer
+          isOpen={showDrumCustomize}
+          onClose={() => setShowDrumCustomize(false)}
+          drumConfig={drumConfig}
+        />
         </>
 
       ) : (

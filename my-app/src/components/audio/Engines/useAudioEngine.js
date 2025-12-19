@@ -15,10 +15,11 @@ export function useAudioEngine(options = {}) {
   const animationFrameRef = useRef(null);
 
   const sampleBuffersRef = useRef(new Map());
+  const overdriveWorkletReadyRef = useRef(null);
+
 
   const [waveform, setWaveform] = useState("sine");
-  const [effect, setEffect] = useState("none");
-
+  const [effects, setEffects] = useState([]); // [{ type: "reverb" } | { type: "overdrive", drive: 2, mix: 1 }]
 
 useEffect(() => {
   let cancelled = false;
@@ -140,34 +141,75 @@ useEffect(() => {
     return audioCtxRef.current;
   };
 
-  // Lazily create a simple reverb convolver
-  const getConvolver = (ctx) => {
-    if (!convolverRef.current) {
-      const convolver = ctx.createConvolver();
-      const length = ctx.sampleRate * 2; // ~2s IR
-      const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
-
-      for (let ch = 0; ch < impulse.numberOfChannels; ch++) {
-        const channelData = impulse.getChannelData(ch);
-        for (let i = 0; i < length; i++) {
-          // noise that decays over time
-          const decay = Math.pow(1 - i / length, 2);
-          channelData[i] = (Math.random() * 2 - 1) * decay;
-        }
-      }
-
-      convolver.buffer = impulse;
-      convolverRef.current = convolver;
+  // Lazily create + cache an impulse response buffer for reverb
+  const getReverbImpulse = (ctx) => {
+    if (convolverRef.current && convolverRef.current.__impulse) {
+      return convolverRef.current.__impulse;
     }
-    return convolverRef.current;
+
+    const length = ctx.sampleRate * 2; // ~2s IR
+    const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
+
+    for (let ch = 0; ch < impulse.numberOfChannels; ch++) {
+      const channelData = impulse.getChannelData(ch);
+      for (let i = 0; i < length; i++) {
+        const decay = Math.pow(1 - i / length, 2);
+        channelData[i] = (Math.random() * 2 - 1) * decay;
+      }
+    }
+
+    // Store on convolverRef as a convenient cache container
+    if (!convolverRef.current) convolverRef.current = {};
+    convolverRef.current.__impulse = impulse;
+    return impulse;
   };
 
-  const playNote = (
+  const createReverbNode = (ctx) => {
+    const convolver = ctx.createConvolver();
+    convolver.buffer = getReverbImpulse(ctx);
+    return convolver;
+  };
+
+  // Ensure AudioWorklet modules are loaded once
+  const ensureOverdriveWorklet = async (ctx) => {
+    if (!ctx?.audioWorklet) return;
+    if (!overdriveWorkletReadyRef.current) {
+      overdriveWorkletReadyRef.current = ctx.audioWorklet
+        .addModule("/audio-worklets/overdrive-processor.js")
+        .catch((err) => {
+          console.warn("[audio] Failed to load overdrive worklet:", err);
+          overdriveWorkletReadyRef.current = null;
+        });
+    }
+    return overdriveWorkletReadyRef.current;
+  };
+
+  const createOverdriveNode = async (ctx, params = {}) => {
+    await ensureOverdriveWorklet(ctx);
+    if (!ctx?.audioWorklet) return null;
+
+    try {
+      const node = new AudioWorkletNode(ctx, "overdrive-processor");
+      const driveParam = node.parameters.get("drive");
+      const mixParam = node.parameters.get("mix");
+
+      if (driveParam) driveParam.setValueAtTime(params.drive ?? 2, ctx.currentTime);
+      if (mixParam) mixParam.setValueAtTime(params.mix ?? 1, ctx.currentTime);
+
+      return node;
+    } catch (e) {
+      console.warn("[audio] Failed to create overdrive node:", e);
+      return null;
+    }
+  };
+
+
+  const playNote = async (
     freq,
     {
       source = "local",
       waveformOverride,
-      effectOverride,
+      effectsOverride,
     } = {}
   ) => {
     const ctx = getAudioContext();
@@ -175,7 +217,12 @@ useEffect(() => {
     if (!ctx || !masterGain) return;
 
     const oscWaveform = waveformOverride || waveform;
-    const fx = effectOverride || effect;
+    const fxChainRaw = effectsOverride ?? effects;
+    const fxChain = Array.isArray(fxChainRaw)
+      ? fxChainRaw
+      : fxChainRaw
+      ? [{ type: String(fxChainRaw) }] // backward compatible with old "effect" string
+      : [];
 
     const oscillator = ctx.createOscillator();
     const gainNode = ctx.createGain();
@@ -184,15 +231,39 @@ useEffect(() => {
     oscillator.frequency.value = freq;
     gainNode.gain.value = 0.13;
 
-    if (fx === "reverb") {
-      const convolver = getConvolver(ctx);
-      oscillator.connect(gainNode);
-      gainNode.connect(convolver);
-      convolver.connect(masterGain);
-    } else {
-      oscillator.connect(gainNode);
-      gainNode.connect(masterGain);
+    // Build a per-note FX chain (max 5)
+    oscillator.connect(gainNode);
+
+    let last = gainNode;
+
+    const limitedChain = fxChain.slice(0, 5);
+    for (const fx of limitedChain) {
+      const type = typeof fx === "string" ? fx : fx?.type;
+
+      if (!type || type === "none") continue;
+
+      if (type === "reverb") {
+        const reverb = createReverbNode(ctx);
+        last.connect(reverb);
+        last = reverb;
+        continue;
+      }
+
+      if (type === "overdrive") {
+        // eslint-disable-next-line no-await-in-loop
+        const od = await createOverdriveNode(ctx, {
+          drive: fx?.drive,
+          mix: fx?.mix,
+        });
+        if (od) {
+          last.connect(od);
+          last = od;
+        }
+        continue;
+      }
     }
+
+    last.connect(masterGain);
 
     oscillator.start();
     oscillator.stop(ctx.currentTime + 1.5);
@@ -208,7 +279,7 @@ useEffect(() => {
         type: "note",
         freq,
         waveform: oscWaveform,
-        effect: fx,
+        effects: limitedChain,
       });
     }
   };
@@ -244,18 +315,20 @@ useEffect(() => {
   // Play a note coming from a remote user
   const playRemoteNote = (
     freq,
-    { waveform: remoteWaveform, effect: remoteEffect } = {}
+    { waveform: remoteWaveform, effects: remoteEffects, effect: remoteEffect } = {}
   ) => {
     playNote(freq, {
       source: "remote",
       waveformOverride: remoteWaveform,
-      effectOverride: remoteEffect,
+      effectsOverride: remoteEffects ?? remoteEffect, // supports old string too
     });
   };
 
-  // Let the room change our effect (if you wire that in)
-  const setEffectFromRoom = (roomEffect) => {
-    setEffect(roomEffect);
+  const setEffectFromRoom = (roomEffects) => {
+    // Accept either old string 'effect' or new effects array
+    if (Array.isArray(roomEffects)) setEffects(roomEffects);
+    else if (roomEffects) setEffects([{ type: String(roomEffects) }]);
+    else setEffects([]);
   };
 
   const loadSample = async (ctx, url) => {
@@ -294,12 +367,12 @@ useEffect(() => {
     // state
     waveform,
     setWaveform,
-    effect,
-    setEffect,
+    effects,
+    setEffects,
+
 
     // low-level helpers
     getAudioContext,
-    getConvolver,
 
     // actions
     playNote,
