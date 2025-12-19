@@ -1,19 +1,18 @@
-// public/audio-worklets/overdrive-processor.js
 class OverdriveProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [
       {
-        name: "drive",
-        defaultValue: 2,
-        minValue: 1,
-        maxValue: 20,
+        name: "ceiling",
+        defaultValue: 0.6,
+        minValue: 0.01,
+        maxValue: 1.0,
         automationRate: "k-rate",
       },
       {
         name: "mix",
-        defaultValue: 1,
-        minValue: 0,
-        maxValue: 1,
+        defaultValue: 1.0,
+        minValue: 0.0,
+        maxValue: 1.0,
         automationRate: "k-rate",
       },
     ];
@@ -29,22 +28,25 @@ class OverdriveProcessor extends AudioWorkletProcessor {
     const outL = output[0];
     const outR = output[1] || output[0];
 
-    const driveArr = parameters.drive;
+    const ceilingArr = parameters.ceiling;
     const mixArr = parameters.mix;
-    const driveA = driveArr.length > 1;
-    const mixA = mixArr.length > 1;
+
+    const ceilingIsA = ceilingArr.length > 1;
+    const mixIsA = mixArr.length > 1;
 
     for (let i = 0; i < outL.length; i++) {
-      const drive = driveA ? driveArr[i] : driveArr[0];
-      const mix = mixA ? mixArr[i] : mixArr[0];
+      const c = Math.max(
+        0.0001,
+        ceilingIsA ? ceilingArr[i] : ceilingArr[0]
+      );
+      const mix = mixIsA ? mixArr[i] : mixArr[0];
 
       const xL = inL[i] || 0;
       const xR = inR[i] || 0;
 
-      // Soft clip distortion (JSFX-like): tanh(drive*x) normalized
-      const denom = Math.tanh(drive) || 1;
-      const wetL = Math.tanh(drive * xL) / denom;
-      const wetR = Math.tanh(drive * xR) / denom;
+      // HARD CLIP (flat top + bottom)
+      const wetL = Math.max(-c, Math.min(xL, c));
+      const wetR = Math.max(-c, Math.min(xR, c));
 
       outL[i] = xL * (1 - mix) + wetL * mix;
       outR[i] = xR * (1 - mix) + wetR * mix;

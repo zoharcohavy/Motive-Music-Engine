@@ -32,12 +32,10 @@ export function useInstrumentPageLogic() {
         effects: effects ?? effect,
       });
 
-
       // Optionally sync local effect with the room’s effect
       if ((effects || effect) && typeof engine.setEffectFromRoom === "function") {
         engine.setEffectFromRoom(effects ?? effect);
       }
-
     },
   });
 
