@@ -1,4 +1,6 @@
 import { useRef, useState, useEffect } from "react";
+import { createReverbNode } from "../Effects/reverb";
+
 
 export function useAudioEngine(options = {}) {
   const { roomStatus, sendRoomMessage } = options;
@@ -14,6 +16,8 @@ export function useAudioEngine(options = {}) {
 
   const sampleBuffersRef = useRef(new Map());
   const overdriveWorkletReadyRef = useRef(null);
+  const reverbCacheRef = useRef({});
+
 
   const [waveform, setWaveform] = useState("sine");
   const [effects, setEffects] = useState([]); // [{ type: "reverb" } | { type: "overdrive", ceiling: 0.6, mix: 1 }]
@@ -143,13 +147,12 @@ export function useAudioEngine(options = {}) {
     if (!ctx?.audioWorklet) return;
 
     if (!overdriveWorkletReadyRef.current) {
-      overdriveWorkletReadyRef.current = Promise.all([
-        ctx.audioWorklet.addModule("/audio-worklets/Effects/overdrive.js"),
-        ctx.audioWorklet.addModule("/audio-worklets/Effects/reverb.js"),
-      ]).catch((err) => {
-        console.warn("[audio] Failed to load effect worklets:", err);
-        overdriveWorkletReadyRef.current = null;
-      });
+      overdriveWorkletReadyRef.current = ctx.audioWorklet
+        .addModule("/audio-worklets/Effects/overdrive.js")
+        .catch((err) => {
+          console.warn("[audio] Failed to load overdrive worklet:", err);
+          overdriveWorkletReadyRef.current = null;
+        });
     }
 
     return overdriveWorkletReadyRef.current;
@@ -217,12 +220,31 @@ export function useAudioEngine(options = {}) {
       }
 
       if (type === "reverb") {
-        await ensureEffectsWorklets(ctx);
-        const rv = new AudioWorkletNode(ctx, "reverb-processor");
-        last.connect(rv);
-        last = rv;
+        // ConvolverNode reverb (safe + fast).
+        // Mix dry + wet so the note doesn’t disappear.
+        const convolver = createReverbNode(ctx, reverbCacheRef);
+
+        const wetGain = ctx.createGain();
+        wetGain.gain.value = 0.35;
+
+        const dryGain = ctx.createGain();
+        dryGain.gain.value = 1.0;
+
+        const sum = ctx.createGain(); // GainNode sums multiple inputs
+
+        // Dry path
+        last.connect(dryGain);
+        dryGain.connect(sum);
+
+        // Wet path
+        last.connect(convolver);
+        convolver.connect(wetGain);
+        wetGain.connect(sum);
+
+        last = sum;
         continue;
       }
+
     }
 
 

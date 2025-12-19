@@ -187,7 +187,7 @@ export default function TopControls({
             disabled={!canAdd}
             title={!canAdd ? "Max 5 effects" : "Add effect"}
           >
-            +effect
+            +
           </button>
         </div>
       </div>
