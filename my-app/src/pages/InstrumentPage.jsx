@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useInstrumentPageLogic } from "../components/audio/useInstrumentPageLogic";
 import RecordingsPanel from "../components/audio/Engines/RecordingsPanel";
 import TopControls from "../components/Controls/TopControls";
@@ -15,6 +15,12 @@ import { useDrumPadConfig } from "../components/audio/SoundBoards/useDrumPadConf
 import { usePersistedState } from "../components/ui/usePersistedState";
 import CollapsibleNotice from "../components/ui/CollapsibleNotice";
 import DrumPadCustomizer from "../components/audio/SoundBoards/DrumPadCustomizer";
+import { useLocation, useNavigate } from "react-router-dom";
+
+// Sidebar images (optional). Replace / add your own later.
+import PianoImg from "../assets/icons/Piano.jpg";
+import DrumImg from "../assets/images/DrumImage.jpeg";
+import SamplerImg from "../assets/icons/tools.svg";
 
 
 
@@ -76,7 +82,20 @@ export default function InstrumentPage({ instrument }) {
     roomUsernames,
   } = useInstrumentPageLogic();
 
-  const isDrums = instrument === "drums";
+  // "sampler" is intentionally the same UI as drums for now.
+  const isDrums = instrument === "drums" || instrument === "sampler";
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const instrumentChoices = useMemo(
+    () => [
+      { id: "piano", label: "Synth / Piano", path: "/piano", img: PianoImg },
+      { id: "drums", label: "Drums", path: "/drum", img: DrumImg },
+      { id: "sampler", label: "Sampler", path: "/sampler", img: SamplerImg },
+    ],
+    []
+  );
+
 
   const [showDrumCustomize, setShowDrumCustomize] = useState(false);
 
@@ -105,7 +124,7 @@ export default function InstrumentPage({ instrument }) {
 
   // This function is how keyboard keys trigger notes/pads.
   const triggerChar = (charLower) => {
-    if (instrument === "drums") {
+    if (instrument === "drums" || instrument === "sampler") {
       const pad = drumConfig.getPadForChar(charLower);
       if (pad) handleKeyMouseDown(pad);
       return;
@@ -127,7 +146,35 @@ export default function InstrumentPage({ instrument }) {
     triggerChar,
   });
   return (
-    <div className={`tone-test-page app-shell ${isDrums ? "hasDrumDock" : ""}`}>
+    <div className={`tone-test-page app-shell instrumentLayout ${isDrums ? "hasDrumDock" : ""}`}>
+      {/* Left instrument menu */}
+      <aside className="card instrumentMenu">
+        <div className="instrumentMenu__title">Instrument</div>
+        <div className="instrumentMenu__grid">
+          {instrumentChoices.map((c) => {
+            const isActive = location.pathname === c.path;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                className={`instrumentMenu__btn ${isActive ? "isActive" : ""}`}
+                onClick={() => navigate(c.path)}
+                title={c.label}
+              >
+                {c.img ? (
+                  <img className="instrumentMenu__img" src={c.img} alt={c.label} />
+                ) : null}
+                <div className="instrumentMenu__label">{c.label}</div>
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="instrumentMenu__hint">
+          Tip: swap these images later (see the imports at the top of this file).
+        </div>
+      </aside>
+      <main className="instrumentMain">
       {/* Recordings list in upper-right */}
       <RecordingsPanel
         isOpen={isRecPanelOpen}
@@ -243,6 +290,7 @@ export default function InstrumentPage({ instrument }) {
         connectToRoom={connectToRoom}
         disconnectRoom={disconnectRoom}
       />
+      </main>
     </div>
   );
 }
