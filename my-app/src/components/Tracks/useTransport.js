@@ -47,6 +47,7 @@ export function useTransport({
   setViewStartTime,
   getHeadTimeSeconds,
   setHeadTimeSeconds,
+  playClipUrl,
 }) {
   const isTransportPlayingRef = useRef(false);
   const [isTransportPlaying, setIsTransportPlaying] = useState(false);
@@ -60,14 +61,17 @@ export function useTransport({
 
 
   // ---- Helpers -------------------------------------------------------------
-
   const stopAllTransportAudio = useCallback(() => {
     const map = transportActiveClipsRef.current;
     if (!map) return;
 
-    for (const audio of map.values()) {
+    for (const v of map.values()) {
       try {
-        audio.pause();
+        if (v && typeof v.stop === "function") {
+          v.stop(); // WebAudio handle
+        } else if (v && typeof v.pause === "function") {
+          v.pause(); // HTMLAudioElement fallback
+        }
       } catch (e) {
         // ignore
       }
@@ -75,6 +79,7 @@ export function useTransport({
 
     transportActiveClipsRef.current = new Map();
   }, []);
+
 
   // ---- Main toggle --------------------------------------------------------
 
@@ -255,52 +260,67 @@ export function useTransport({
           if (headTime >= clipStart && headTime <= clipEnd) {
             const key = `${track.id}:${clip.id}`;
             shouldBeActive.add(key);
-
             if (!activeMap.has(key)) {
-              // New active clip at this headTime
-              const audio = new Audio(clip.url);
+              // New active clip at this headTime (prefer WebAudio so per-track FX applies)
               const withinClip = Math.max(0, headTime - clipStart);
               const desiredTime = (clip.offset || 0) + withinClip;
 
-              const startAudioAtOffset = () => {
-                try {
-                  const dur = audio.duration || 0;
-                  if (dur > 0) {
-                    // clamp slightly under end to avoid "out of range" issues
-                    audio.currentTime = Math.min(desiredTime, Math.max(0, dur - 0.01));
+              if (typeof playClipUrl === "function") {
+                // WebAudio handle (supports FX)
+                Promise.resolve(
+                  playClipUrl(clip.url, {
+                    offsetSeconds: desiredTime,
+                    effectsOverride: track.effects || [],
+                    gain: 1,
+                  })
+                ).then((handle) => {
+                  if (handle) activeMap.set(key, handle);
+                });
+              } else {
+                // Fallback: HTMLAudio (no FX)
+                const audio = new Audio(clip.url);
+                const startAudioAtOffset = () => {
+                  try {
+                    const dur = audio.duration || 0;
+                    if (dur > 0) {
+                      audio.currentTime = Math.min(desiredTime, Math.max(0, dur - 0.01));
+                    }
+                  } catch (e) {
+                    // ignore
                   }
-                } catch (e) {
-                  // ignore
+                  audio.play().catch(() => {});
+                };
+
+                if (audio.readyState >= 1) startAudioAtOffset();
+                else {
+                  audio.addEventListener("loadedmetadata", startAudioAtOffset, { once: true });
                 }
 
-                audio.play().catch(() => {});
-              };
-
-              if (audio.readyState >= 1) {
-                startAudioAtOffset();
-              } else {
-                audio.addEventListener("loadedmetadata", startAudioAtOffset, {
-                  once: true,
-                });
+                activeMap.set(key, audio);
               }
-
-              activeMap.set(key, audio);
             }
+
+          
           }
         }
       }
 
       // Stop clips that are no longer under the head
-      for (const [key, audio] of activeMap.entries()) {
+      for (const [key, handle] of activeMap.entries()) {
         if (!shouldBeActive.has(key)) {
           try {
-            audio.pause();
+            if (handle && typeof handle.stop === "function") {
+              handle.stop(); // WebAudio handle
+            } else if (handle && typeof handle.pause === "function") {
+              handle.pause(); // HTMLAudio fallback
+            }
           } catch (e) {
             // ignore
           }
           activeMap.delete(key);
         }
       }
+
 
       transportActiveClipsRef.current = activeMap;
 
@@ -317,7 +337,7 @@ export function useTransport({
       transportAnimationFrameRef.current = requestAnimationFrame(step);
     };
 
-    transportAnimationFrameRef.current = requestAnimationFrame(step);
+  transportAnimationFrameRef.current = requestAnimationFrame(step);
   }, [
   tracksRef,
   setTracks,

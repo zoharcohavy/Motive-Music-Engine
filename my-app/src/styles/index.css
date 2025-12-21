@@ -259,3 +259,103 @@ select:focus, button:focus, input:focus {
     height: 64px;
   }
 }
+
+.fxModal__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.fxModal__panel {
+  width: min(640px, 92vw);
+  background: #111;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
+.fxModal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.fxModal__title { margin: 0; font-size: 1.05rem; }
+
+.fxModal__close {
+  border: none;
+  background: transparent;
+  color: rgba(232, 244, 242, 0.75);
+  cursor: pointer;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.fxModal__desc {
+  margin: 0 0 0.9rem 0;
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.fxModal__list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.fxModal__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.fxModal__inline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 160px;
+}
+
+.fxModal__label { font-size: 0.8rem; opacity: 0.8; }
+
+.fxModal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.9rem;
+}
+
+.fxModal__chip {
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.05);
+  font-size: 0.82rem;
+  font-weight: 650;
+  min-width: 92px;
+  text-align: center;
+}
+
+.fxModal__sliderBox {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.03);
+}
+
+.fxModal__sliderLabel {
+  font-size: 0.78rem;
+  opacity: 0.85;
+  width: 58px;
+}

@@ -69,6 +69,8 @@ export default function TrackSection({
   activeRecordingTrackId,
   mouse_interactions,
   trackCanvasRefs,
+
+  onOpenFx,
 }) {
   const [editingTrackId, setEditingTrackId] = useState(null);
   const [nameDraft, setNameDraft] = useState("");
@@ -195,15 +197,12 @@ export default function TrackSection({
       {/* Transport / zoom row */}
     <div className="trackSection__transportRow">
 
-  <button
-    className="btn btn-primary"
-    onClick={() => revealThen(handleGlobalPlay)}
-  >
+  <button className="btn btn-primary trackSection__playBtn" onClick={() => revealThen(handleGlobalPlay)}>
     {isTransportPlaying ? "⏸ Pause" : "▶ Play"}
   </button>
 
 
-<button className="btn" onClick={addTrack}>
+<button className="btn trackSection__addTrackBtn" onClick={addTrack}>
     + Track
   </button>
 
@@ -349,6 +348,15 @@ export default function TrackSection({
               >
                 ✕
               </button>
+              <button
+                type="button"
+                className="btn trackSection__fxBtn"
+                onClick={() => onOpenFx?.(track.id)}
+                title="Track effects"
+              >
+                +FX
+              </button>
+
 
 
               <input
