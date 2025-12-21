@@ -1,8 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 
-export default function DrumPadCustomizer({ isOpen, onClose, drumConfig }) {
+export default function DrumPadCustomizer({
+  isOpen,
+  onClose,
+  drumConfig,
+  drumImageScale,
+  setDrumImageScale,
+  drumKeyOpacity,
+  setDrumKeyOpacity,
+  onResetLayout,
+}) {
+
   const pads = drumConfig?.pads || [];
   const [listeningPadId, setListeningPadId] = useState(null);
+  const [tab, setTab] = useState("assign"); // "general" | "assign"
   const keyInputRefs = useRef({});
 
   useEffect(() => {
@@ -44,7 +55,7 @@ export default function DrumPadCustomizer({ isOpen, onClose, drumConfig }) {
   };
 
   return (
-    <div className="roomModal__overlay" role="dialog" aria-modal="true">
+    <div className="roomModal__overlay drumCustomOverlay" role="dialog" aria-modal="true">
       <div className="roomModal__panel drumCustomPanel">
         {/* Header: X top-left, tight */}
         <div className="drumCustomHeader">
@@ -62,83 +73,153 @@ export default function DrumPadCustomizer({ isOpen, onClose, drumConfig }) {
           </button>
           <div className="drumCustomTitle">Drum pad customization (click 'key' to re-assign it)</div>
         </div>
+        <div className="drumCustomTabs">
+          <button
+            type="button"
+            className={`drumTabBtn ${tab === "general" ? "isActive" : ""}`}
+            onClick={() => setTab("general")}
+          >
+            General
+          </button>
+          <button
+            type="button"
+            className={`drumTabBtn ${tab === "assign" ? "isActive" : ""}`}
+            onClick={() => setTab("assign")}
+          >
+            Assign Keys
+          </button>
+        </div>
 
-        <div className="drumCustomBody">
-          <div className="drumPadGrid">
-            {pads.map((pad) => {
-              const key = drumConfig.getCharForPadId?.(pad.id);
-              const prettyKey =
-                key === " " ? "SPACE" : key ? key.toUpperCase() : "";
 
-              const fileInputId = `pad-file-${pad.id}-${makeId()}`;
+        {tab === "general" ? (
+          <div className="drumCustomBody">
+            <div className="drumGeneralBox">
+              <div className="drumGeneralRow">
+                <div className="drumGeneralLabel">Drum image size</div>
+                <input
+                  type="range"
+                  min="0.8"
+                  max="1.8"
+                  step="0.01"
+                  value={Number(drumImageScale ?? 1.25)}
+                  onChange={(e) => setDrumImageScale?.(Number(e.target.value))}
+                  disabled={!setDrumImageScale}
+                />
+                <div className="drumGeneralValue">
+                  {Math.round(Number(drumImageScale ?? 1.25) * 100)}%
+                </div>
+              </div>
 
-              return (
-                <div className="drumPadCard" key={pad.id}>
-                  {/* Row 1: Name (left) + Assign key (right) */}
-                  <div className="drumRow">
-                    <input
-                      className="drumNameInput"
-                      value={pad.name || `Pad ${pad.id}`}
-                      onChange={(e) => setPadName(pad.id, e.target.value)}
-                      title="Pad name"
-                    />
+              <div className="drumGeneralRow">
+                <div className="drumGeneralLabel">Key transparency</div>
+                <input
+                  type="range"
+                  min="0.10"
+                  max="0.95"
+                  step="0.01"
+                  value={Number(drumKeyOpacity ?? 0.55)}
+                  onChange={(e) => setDrumKeyOpacity?.(Number(e.target.value))}
+                  disabled={!setDrumKeyOpacity}
+                />
+                <div className="drumGeneralValue">
+                  {Math.round(Number(drumKeyOpacity ?? 0.55) * 100)}%
+                </div>
+              </div>
 
-                    <button
-                      type="button"
-                      className="drumHalfBtn"
-                      onClick={() => setListeningPadId(pad.id)}
-                      title="Assign key"
-                    >
-                      {listeningPadId === pad.id ? "Press key…" : `Key: ${prettyKey || "—"}`}
-                    </button>
-                  </div>
+              <div className="drumGeneralRow drumGeneralRow--actions">
+                <button
+                  type="button"
+                  className="btn btn--compact"
+                  onClick={() => onResetLayout?.()}
+                  disabled={!onResetLayout}
+                >
+                  Reset layout
+                </button>
 
-                  {/* Key capture (only when listening) */}
-                  {listeningPadId === pad.id ? (
-                    <input
-                      ref={(el) => {
-                        keyInputRefs.current[pad.id] = el;
-                      }}
-                      autoFocus
-                      className="drumKeyCapture"
-                      onKeyDown={(e) => assignKey(pad.id, e)}
-                      onBlur={() => setListeningPadId(null)}
-                      value=""
-                      readOnly
-                      placeholder="Press a key (not Enter/Space)"
-                    />
-                  ) : null}
+                <div className="drumGeneralHint">
+                  Reset puts cymbals on top, toms under, snare/hat under, kicks bottom, extras on side.
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          // ✅ Assign Keys tab = YOUR EXISTING UI (unchanged)
+          <div className="drumCustomBody">
+            <div className="drumPadGrid">
+              {pads.map((pad) => {
+                const key = drumConfig.getCharForPadId?.(pad.id);
+                const prettyKey =
+                  key === " " ? "SPACE" : key ? key.toUpperCase() : "";
 
-                  {/* Row 2: Square choose button + filename */}
-                  <div className="drumFileRow">
-                    <input
-                      id={fileInputId}
-                      type="file"
-                      accept="audio/*"
-                      className="drumHiddenFile"
-                      onChange={(e) =>
-                        drumConfig.setPadSampleFile?.(pad.id, e.target.files?.[0])
-                      }
-                    />
+                const fileInputId = `pad-file-${pad.id}-${makeId()}`;
 
-                    <label
-                      htmlFor={fileInputId}
-                      className="drumFileBtn"
-                      title="Choose sample"
-                      aria-label="Choose sample"
-                    >
-                      🎵
-                    </label>
+                return (
+                  <div className="drumPadCard" key={pad.id}>
+                    <div className="drumRow">
+                      <input
+                        className="drumNameInput"
+                        value={pad.name || `Pad ${pad.id}`}
+                        onChange={(e) => setPadName(pad.id, e.target.value)}
+                        title="Pad name"
+                      />
 
-                    <div className="drumFileName" title={pad.sampleName || ""}>
-                      {pad.sampleName ? pad.sampleName : "Default sample"}
+                      <button
+                        type="button"
+                        className="drumHalfBtn"
+                        onClick={() => setListeningPadId(pad.id)}
+                        title="Assign key"
+                      >
+                        {listeningPadId === pad.id ? "Press key…" : `Key: ${prettyKey || "—"}`}
+                      </button>
+                    </div>
+
+                    {listeningPadId === pad.id ? (
+                      <input
+                        ref={(el) => {
+                          keyInputRefs.current[pad.id] = el;
+                        }}
+                        autoFocus
+                        className="drumKeyCapture"
+                        onKeyDown={(e) => assignKey(pad.id, e)}
+                        onBlur={() => setListeningPadId(null)}
+                        value=""
+                        readOnly
+                        placeholder="Press a key (not Enter/Space)"
+                      />
+                    ) : null}
+
+                    <div className="drumFileRow">
+                      <input
+                        id={fileInputId}
+                        type="file"
+                        accept="audio/*"
+                        className="drumHiddenFile"
+                        onChange={(e) =>
+                          drumConfig.setPadSampleFile?.(pad.id, e.target.files?.[0])
+                        }
+                      />
+
+                      <label
+                        htmlFor={fileInputId}
+                        className="drumFileBtn"
+                        title="Choose sample"
+                        aria-label="Choose sample"
+                      >
+                        🎵
+                      </label>
+
+                      <div className="drumFileName" title={pad.sampleName || ""}>
+                        {pad.sampleName ? pad.sampleName : "Default sample"}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
+
+
       </div>
     </div>
   );
