@@ -6,6 +6,7 @@ import MouseModeToggle from "../components/Controls/MouseModeToggle";
 import TrackSection from "../components/Tracks/TrackSection";
 import RoomModal from "../components/Rooms/RoomModal";
 import TrackFxModal from "../components/Controls/TrackFxModal";
+import { getDefaultDrumAnchors } from "../components/audio/SoundBoards/DrumLayoutDefaults";
 
 import PianoKeyboard from "../components/audio/SoundBoards/PianoKeyboard";
 import DrumMachine from "../components/audio/SoundBoards/DrumMachine";
@@ -83,7 +84,9 @@ export default function InstrumentPage({ instrument }) {
   } = useInstrumentPageLogic();
 
   // "sampler" is intentionally the same UI as drums for now.
-  const isDrums = instrument === "drums" || instrument === "sampler";
+  const isDrums = instrument === "drums";
+  const isSampler = instrument === "sampler";
+
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -110,8 +113,9 @@ export default function InstrumentPage({ instrument }) {
 
 
   useEffect(() => {
-    if (!isDrums) setShowDrumCustomize(false);
-  }, [isDrums]);
+    if (!(isDrums || isSampler)) setShowDrumCustomize(false);
+  }, [isDrums, isSampler]);
+
 
 // Hide advanced panels by default, but remember the user's choice.
   const [isWaveformOpen, setIsWaveformOpen] = usePersistedState(
@@ -127,6 +131,7 @@ export default function InstrumentPage({ instrument }) {
     "ui.trackControlsWidth",
     96
   );
+
 
 
   // Drum customization foundation (pads + key bindings persisted in localStorage)
@@ -155,6 +160,29 @@ export default function InstrumentPage({ instrument }) {
     },
     triggerChar,
   });
+  // Drums-only UI prefs (persisted)
+  const [drumImageScale, setDrumImageScale] = usePersistedState(
+    "ui.drums.imageScale",
+    1.25 // bigger by default
+  );
+
+  const [drumKeyOpacity, setDrumKeyOpacity] = usePersistedState(
+    "ui.drums.keyOpacity",
+    0.55
+  );
+
+  // Drums-only pad anchor layout (persisted)
+  const [drumAnchors, setDrumAnchors] = usePersistedState(
+    "ui.drums.anchors",
+    getDefaultDrumAnchors()
+  );
+
+  const resetDrumLayout = () => {
+    setDrumAnchors(getDefaultDrumAnchors());
+    setDrumImageScale(1.25);
+    setDrumKeyOpacity(0.55);
+  };
+
   return (
     <div className={`tone-test-page app-shell instrumentLayout ${isDrums ? "hasDrumDock" : ""}`}>
       {/* Left instrument menu */}
@@ -264,28 +292,53 @@ export default function InstrumentPage({ instrument }) {
       {/* Soundboard */}
       {isDrums ? (
         <>
-        <DrumMachine
-          pads={drumConfig.pads}
-          activeKeyIds={activeKeyIds}
-          onMouseDownKey={handleKeyMouseDown}
-          onMouseEnterKey={handleKeyMouseEnter}
-          getCharForPadId={drumConfig.getCharForPadId}
-          showCustomize={showDrumCustomize}
-          onToggleCustomize={() => setShowDrumCustomize((v) => !v)}
-        />
-
-        <DrumPadCustomizer
-          isOpen={showDrumCustomize}
-          onClose={() => setShowDrumCustomize(false)}
-          drumConfig={drumConfig}
-        />
+          <DrumMachine
+            layout="kit"
+            drumImageScale={drumImageScale}
+            drumKeyOpacity={drumKeyOpacity}
+            drumAnchors={drumAnchors}
+            pads={drumConfig.pads}
+            activeKeyIds={activeKeyIds}
+            onMouseDownKey={handleKeyMouseDown}
+            onMouseEnterKey={handleKeyMouseEnter}
+            getCharForPadId={drumConfig.getCharForPadId}
+            showCustomize={showDrumCustomize}
+            onToggleCustomize={() => setShowDrumCustomize((v) => !v)}
+          />
         </>
-
+      ) : isSampler ? (
+        <>
+          <DrumMachine
+            layout="grid"
+            pads={drumConfig.pads}
+            activeKeyIds={activeKeyIds}
+            onMouseDownKey={handleKeyMouseDown}
+            onMouseEnterKey={handleKeyMouseEnter}
+            getCharForPadId={drumConfig.getCharForPadId}
+            showCustomize={showDrumCustomize}
+            onToggleCustomize={() => setShowDrumCustomize((v) => !v)}
+          />
+        </>
       ) : (
         <PianoKeyboard
           activeKeyIds={activeKeyIds}
           onMouseDownKey={handleKeyMouseDown}
           onMouseEnterKey={handleKeyMouseEnter}
+        />
+      )}
+
+      {(isDrums || isSampler) && (
+        <DrumPadCustomizer
+          isOpen={showDrumCustomize}
+          onClose={() => setShowDrumCustomize(false)}
+          drumConfig={drumConfig}
+
+          /* General tab only applies to drums */
+          drumImageScale={isDrums ? drumImageScale : undefined}
+          setDrumImageScale={isDrums ? setDrumImageScale : undefined}
+          drumKeyOpacity={isDrums ? drumKeyOpacity : undefined}
+          setDrumKeyOpacity={isDrums ? setDrumKeyOpacity : undefined}
+          onResetLayout={isDrums ? resetDrumLayout : undefined}
         />
       )}
 
@@ -301,6 +354,7 @@ export default function InstrumentPage({ instrument }) {
         }}
       />
 
+
       {/* Room modal */}
       <RoomModal
         isOpen={isRoomModalOpen}
@@ -311,6 +365,7 @@ export default function InstrumentPage({ instrument }) {
         connectToRoom={connectToRoom}
         disconnectRoom={disconnectRoom}
       />
+      
       </main>
     </div>
   );
