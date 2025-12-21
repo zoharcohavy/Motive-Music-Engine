@@ -5,6 +5,7 @@ import TopControls from "../components/Controls/TopControls";
 import MouseModeToggle from "../components/Controls/MouseModeToggle";
 import TrackSection from "../components/Tracks/TrackSection";
 import RoomModal from "../components/Rooms/RoomModal";
+import TrackFxModal from "../components/Controls/TrackFxModal";
 
 import PianoKeyboard from "../components/audio/SoundBoards/PianoKeyboard";
 import DrumMachine from "../components/audio/SoundBoards/DrumMachine";
@@ -28,8 +29,6 @@ export default function InstrumentPage({ instrument }) {
   const {
     waveform,
     setWaveform,
-    effects,
-    setEffects,
     recordings,
     recordingsError,
     storageFiles,
@@ -40,6 +39,7 @@ export default function InstrumentPage({ instrument }) {
     setMouseMode,
 
     tracks,
+    setTrackEffects,
     viewStartTime,
     setViewStartTime,
     headTimeSeconds,
@@ -98,6 +98,16 @@ export default function InstrumentPage({ instrument }) {
 
 
   const [showDrumCustomize, setShowDrumCustomize] = useState(false);
+  const [fxModalTrackId, setFxModalTrackId] = useState(null);
+
+  const fxTrack = useMemo(
+    () => (tracks || []).find((t) => t.id === fxModalTrackId) || null,
+    [tracks, fxModalTrackId]
+  );
+
+  const openFxForTrack = (trackId) => setFxModalTrackId(trackId);
+  const closeFxModal = () => setFxModalTrackId(null);
+
 
   useEffect(() => {
     if (!isDrums) setShowDrumCustomize(false);
@@ -190,8 +200,6 @@ export default function InstrumentPage({ instrument }) {
       <TopControls
         waveform={waveform}
         setWaveform={setWaveform}
-        effects={effects}
-        setEffects={setEffects}
         showWaveform={!isDrums}
         roomId={roomId}
         roomStatus={roomStatus}
@@ -250,6 +258,7 @@ export default function InstrumentPage({ instrument }) {
         activeRecordingTrackId={activeRecordingTrackId}
         mouse_interactions={mouse_interactions}
         trackCanvasRefs={trackCanvasRefs}
+        onOpenFx={openFxForTrack}
       />
 
       {/* Soundboard */}
@@ -279,6 +288,18 @@ export default function InstrumentPage({ instrument }) {
           onMouseEnterKey={handleKeyMouseEnter}
         />
       )}
+
+      {/* Modals */}
+      <TrackFxModal
+        isOpen={fxModalTrackId != null}
+        onClose={closeFxModal}
+        trackName={fxTrack?.name}
+        effects={fxTrack?.effects || []}
+        onChangeEffects={(next) => {
+          if (fxModalTrackId == null) return;
+          setTrackEffects?.(fxModalTrackId, next);
+        }}
+      />
 
       {/* Room modal */}
       <RoomModal

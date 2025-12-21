@@ -35,6 +35,20 @@
   border-color: rgba(255,255,255,0.22);
   background: rgba(255,255,255,0.12);
 }
+/* Compact button that still matches the button language */
+.btn--compact {
+  padding: 0.14rem 0.45rem;
+  font-size: 0.78rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  cursor: pointer;
+  line-height: 1;
+}
+.btn--compact:hover { background: rgba(255,255,255,0.10); }
+.btn--compact:active { transform: translateY(1px); }
+
 
 /* Inputs */
 .input {

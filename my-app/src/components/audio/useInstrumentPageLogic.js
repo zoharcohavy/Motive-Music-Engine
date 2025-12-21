@@ -55,8 +55,8 @@ export function useInstrumentPageLogic() {
   // - globalZoom, changeZoom
   // - mouseMode, setMouseMode
   // - handleGlobalPlay, handleTrackStripMouseDown, handleTrackStripMouseMove
-  const trackModel = useTrackModel();
-
+  const trackModel = useTrackModel({ playClipUrl: audioEngine.playUrl });
+  
   // --- Recording (MediaRecorder) ---
   // New hook signature:
   //   useRecording({
@@ -96,12 +96,24 @@ export function useInstrumentPageLogic() {
       prev.includes(key.id) ? prev : [...prev, key.id]
     );
 
-    // Play piano note OR drum sample
+    // Only hear FX from the currently selected track
+    const tracksNow = trackModel.tracksRef?.current || [];
+    const sel = tracksNow.find((t) => t.id === trackModel.selectedTrackId);
+    const selectedFx = sel?.effects || [];
+
+    // Play piano note OR drum sample (through selected track FX)
     if (hasSample && audioEngine.playSample) {
-      audioEngine.playSample(key.sampleUrl, { source: "local" });
+      audioEngine.playSample(key.sampleUrl, {
+        source: "local",
+        effectsOverride: selectedFx,
+      });
     } else if (hasFreq) {
-      audioEngine.playNote(key.freq, { source: "local" });
+      audioEngine.playNote(key.freq, {
+        source: "local",
+        effectsOverride: selectedFx,
+      });
     }
+
 
     // Clear highlight shortly after
     setTimeout(() => {
@@ -123,11 +135,24 @@ export function useInstrumentPageLogic() {
       prev.includes(key.id) ? prev : [...prev, key.id]
     );
 
+    // Only hear FX from the currently selected track
+    const tracksNow = trackModel.tracksRef?.current || [];
+    const sel = tracksNow.find((t) => t.id === trackModel.selectedTrackId);
+    const selectedFx = sel?.effects || [];
+
+    // Play through selected track FX
     if (hasSample && audioEngine.playSample) {
-      audioEngine.playSample(key.sampleUrl, { source: "local" });
+      audioEngine.playSample(key.sampleUrl, {
+        source: "local",
+        effectsOverride: selectedFx,
+      });
     } else if (hasFreq) {
-      audioEngine.playNote(key.freq, { source: "local" });
+      audioEngine.playNote(key.freq, {
+        source: "local",
+        effectsOverride: selectedFx,
+      });
     }
+
 
     setTimeout(() => {
       trackModel.setActiveKeyIds((prev) =>
@@ -267,6 +292,7 @@ export function useInstrumentPageLogic() {
 
     // ===== Tracks =====
     tracks: trackModel.tracks,
+    setTrackEffects: trackModel.setTrackEffects,
     viewStartTime: trackModel.viewStartTime,
     setViewStartTime: trackModel.setViewStartTime,
     headTimeSeconds: trackModel.headTimeSeconds,

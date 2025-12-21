@@ -148,7 +148,7 @@ export function useAudioEngine(options = {}) {
 
     if (!overdriveWorkletReadyRef.current) {
       overdriveWorkletReadyRef.current = ctx.audioWorklet
-        .addModule("/audio-worklets/Effects/overdrive.js")
+        .addModule(`${process.env.PUBLIC_URL}/audio-worklets/Effects/overdrive.js`)
         .catch((err) => {
           console.warn("[audio] Failed to load overdrive worklet:", err);
           overdriveWorkletReadyRef.current = null;
@@ -160,21 +160,139 @@ export function useAudioEngine(options = {}) {
 
 
   const createOverdriveNode = async (ctx, params = {}) => {
-    await ensureEffectsWorklets(ctx);
+    const ceiling = Math.min(1, Math.max(0.05, Number(params.ceiling ?? 0.6)));
+    const mix = Math.min(1, Math.max(0, Number(params.mix ?? 1)));
 
-    const node = new AudioWorkletNode(ctx, "overdrive-processor");
+    // Try AudioWorklet first
+    try {
+      await ensureEffectsWorklets(ctx);
 
-    node.parameters
-      .get("ceiling")
-      ?.setValueAtTime(params.ceiling ?? 0.6, ctx.currentTime);
+      // This will throw if the processor never registered
+      const node = new AudioWorkletNode(ctx, "overdrive-processor");
 
-    node.parameters
-      .get("mix")
-      ?.setValueAtTime(params.mix ?? 1, ctx.currentTime);
+      node.parameters.get("ceiling")?.setValueAtTime(ceiling, ctx.currentTime);
+      node.parameters.get("mix")?.setValueAtTime(mix, ctx.currentTime);
 
-    return node;
+      return node;
+    } catch (err) {
+      console.warn("[audio] Overdrive worklet unavailable; using WaveShaper fallback:", err);
+
+      // Fallback: WaveShaper (works everywhere, no worklet required)
+      const shaper = ctx.createWaveShaper();
+      const n = 2048;
+      const curve = new Float32Array(n);
+
+      // Hard clip around ceiling, then normalize back to -1..1
+      for (let i = 0; i < n; i++) {
+        const x = (i * 2) / (n - 1) - 1; // -1..1
+        const y = Math.max(-ceiling, Math.min(ceiling, x));
+        curve[i] = y / ceiling;
+      }
+
+      shaper.curve = curve;
+      shaper.oversample = "4x";
+
+      // If you want mix in fallback: do it outside with dry/wet gains.
+      return shaper;
+    }
   };
 
+
+  // Connect an input node through the given FX chain into masterGain.
+  const connectThroughFx = async (ctx, inputNode, fxChainRaw) => {
+    const masterGain = masterGainRef.current;
+    if (!ctx || !masterGain) return { output: null };
+
+    // Back-compat: allow old string effect values
+    const fxChain = Array.isArray(fxChainRaw)
+      ? fxChainRaw
+      : fxChainRaw
+      ? [{ type: String(fxChainRaw) }]
+      : [];
+
+    const limitedChain = fxChain.slice(0, 5);
+
+    let last = inputNode;
+
+    for (const fx of limitedChain) {
+      const type = fx?.type;
+      if (!type || type === "none") continue;
+
+      if (type === "overdrive") {
+        const od = await createOverdriveNode(ctx, fx);
+        last.connect(od);
+        last = od;
+        continue;
+      }
+
+      if (type === "reverb") {
+        const convolver = createReverbNode(ctx, reverbCacheRef);
+
+        const wetGain = ctx.createGain();
+        wetGain.gain.value = 0.35;
+
+        const dryGain = ctx.createGain();
+        dryGain.gain.value = 1.0;
+
+        const sum = ctx.createGain();
+
+        last.connect(dryGain);
+        dryGain.connect(sum);
+
+        last.connect(convolver);
+        convolver.connect(wetGain);
+        wetGain.connect(sum);
+
+        last = sum;
+        continue;
+      }
+    }
+
+    last.connect(masterGain);
+    return { output: last, limitedChain };
+  };
+
+  // Play an audio URL through the FX chain (used for clips + drum samples)
+  const playUrl = async (
+    url,
+    { offsetSeconds = 0, effectsOverride, gain = 1 } = {}
+  ) => {
+    if (!url) return null;
+
+    const ctx = getAudioContext();
+    if (!ctx) return null;
+
+    const buffer = await loadSample(ctx, url);
+    if (!buffer) return null;
+
+    const sourceNode = ctx.createBufferSource();
+    sourceNode.buffer = buffer;
+
+    // optional gain staging
+    const g = ctx.createGain();
+    g.gain.value = gain;
+
+    sourceNode.connect(g);
+
+    await connectThroughFx(ctx, g, effectsOverride ?? effects);
+
+    try {
+      sourceNode.start(0, Math.max(0, offsetSeconds));
+    } catch (e) {
+      // ignore start errors
+      return null;
+    }
+
+    return {
+      stop: () => {
+        try {
+          sourceNode.stop();
+        } catch (e) {
+          // ignore
+        }
+      },
+    };
+  };
 
   const playNote = async (
     freq,
@@ -275,23 +393,14 @@ export function useAudioEngine(options = {}) {
     {
       source: _source = "local",
       // You could later add per-sample gain or other options here
+      effectsOverride,
     } = {}
   ) => {
     if (!sampleUrl) return;
 
-    const ctx = getAudioContext();
-    const masterGain = masterGainRef.current;
-    if (!ctx || !masterGain) return;
+    const handle = await playUrl(sampleUrl, { offsetSeconds: 0, effectsOverride });
+    void handle;
 
-    const buffer = await loadSample(ctx, sampleUrl);
-    if (!buffer) return;
-
-    const sourceNode = ctx.createBufferSource();
-    sourceNode.buffer = buffer;
-
-    // Route through masterGain so it gets recorded like the piano
-    sourceNode.connect(masterGain);
-    sourceNode.start();
 
     // OPTIONAL: broadcast drums later if desired
     void _source; // keep signature for future use
@@ -356,6 +465,7 @@ export function useAudioEngine(options = {}) {
     // actions
     playNote,
     playSample,
+    playUrl,
     playRemoteNote,
     setEffectFromRoom,
   };

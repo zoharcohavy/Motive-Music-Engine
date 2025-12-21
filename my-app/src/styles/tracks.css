@@ -10,6 +10,7 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  margin-bottom: 3px;
 }
 
 .trackSection__hint {
@@ -24,6 +25,15 @@
   margin-left: 0.75rem;
   min-width: 3.5rem;
 }
+
+/* Make +Track feel like a secondary control (smaller than Play) */
+.trackSection__addTrackBtn {
+  padding: 0.18rem 0.55rem;
+  font-size: 0.8rem;
+  border-radius: 5px;
+  opacity: 0.95;
+}
+
 
 /* =========================
    Zoom controls (carbon copy)
@@ -128,6 +138,19 @@
   cursor: pointer;
   text-align: left;
 }
+
+/* Small buttons that should still look like the main .btn style */
+.btn--compact {
+  padding: 0.22rem 0.55rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255,255,255,0.15);
+  background: rgba(255,255,255,0.06);
+  color: inherit;
+  cursor: pointer;
+  line-height: 1;
+}
+.btn--compact:hover { background: rgba(255,255,255,0.10); }
+.btn--compact:active { transform: translateY(1px); }
 
 /* prevent global button hover changes */
 .trackSection__trackBtn:hover {
@@ -275,3 +298,10 @@
   padding: 0;           /* avoid text-based resizing */
 }
 
+/* Per-track +FX button: smaller, slightly less rounded than Play */
+.trackSection__fxBtn {
+  padding: 0.16rem 0.48rem;
+  font-size: 0.75rem;
+  border-radius: 4px;
+  letter-spacing: 0.2px;
+}

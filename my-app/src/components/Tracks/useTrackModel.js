@@ -23,6 +23,7 @@ export function useTrackModel(options = {}) {
       headPos: 0, // 0..1 across the strip
       clips: [], // [{ id, url, duration, startTime, image }]
       // legacy fields (kept so old code doesn’t crash if it still references them):
+      effects: [],
       hasRecording: false,
       recordingUrl: null,
       recordingDuration: 0,
@@ -68,6 +69,7 @@ export function useTrackModel(options = {}) {
     setViewStartTime,
     getHeadTimeSeconds: () => headTimeSeconds,
     setHeadTimeSeconds,
+    playClipUrl: options.playClipUrl,
   });
 
 
@@ -116,6 +118,7 @@ export function useTrackModel(options = {}) {
         zoom: globalZoom,
         headPos: 0,
         clips: [],
+        effects: [],
         hasRecording: false,
         recordingUrl: null,
         recordingDuration: 0,
@@ -126,6 +129,14 @@ export function useTrackModel(options = {}) {
       },
     ]);
     setNextTrackId((id) => id + 1);
+  };
+
+  // Per-track effects chain (max 5). Stored on each track.
+  const setTrackEffects = (trackId, nextEffects) => {
+    const arr = Array.isArray(nextEffects) ? nextEffects.slice(0, 5) : [];
+    setTracks((prev) =>
+      prev.map((t) => (t.id === trackId ? { ...t, effects: arr } : t))
+    );
   };
 
   // change global zoom; all tracks share the same zoom
@@ -707,8 +718,21 @@ if (track.clips && track.clips.length > 0) {
 
     const deleteTrack = (trackId) => {
       setTracks((prev) => {
+        // Don't allow deleting the last remaining track.
+        if (!Array.isArray(prev) || prev.length <= 1) {
+          window.alert("You can't delete the last track. Add another track first.");
+          return prev;
+        }
+
         const next = prev.filter((t) => t.id !== trackId);
-        return next.length ? next : prev; // don't allow deleting last track
+
+        // Safety: if something weird happens, never return an empty array
+        if (!next.length) {
+          window.alert("You can't delete the last track. Add another track first.");
+          return prev;
+        }
+        return next;
+
       });
 
       // If user deleted the currently selected track, select the first remaining track
@@ -768,6 +792,7 @@ if (track.clips && track.clips.length > 0) {
     deleteTrack,
     renameTrack,
     setTrackHeightPx,
+    setTrackEffects,
     DEFAULT_TRACK_HEIGHT_PX,
     MIN_TRACK_HEIGHT_PX,
     MAX_TRACK_HEIGHT_PX,
