@@ -197,7 +197,15 @@ export default function DrumKeyboard({
         ) : (
     // grid layout (sampler / old behavior)
     <>
-      <img className="drumKb__img" src={DrumImage} alt="Drum pad" />
+      <img
+        className="drumKb__img"
+        src={DrumImage}
+        alt="Drum pad"
+        style={{
+          transform: `scale(${Number(drumImageScale) || 1})`,
+          transformOrigin: "center top",
+        }}
+      />
 
       <div
         className="drumKb__grid"

@@ -183,6 +183,22 @@ export default function InstrumentPage({ instrument }) {
     setDrumKeyOpacity(0.55);
   };
 
+  // Sampler-only UI prefs (persisted)
+  const [samplerImageScale, setSamplerImageScale] = usePersistedState(
+    "ui.sampler.imageScale",
+    1.0
+  );
+
+  const [samplerKeyOpacity, setSamplerKeyOpacity] = usePersistedState(
+    "ui.sampler.keyOpacity",
+    0.9
+  );
+
+  const resetSamplerLayout = () => {
+    setSamplerImageScale(1.0);
+    setSamplerKeyOpacity(0.9);
+  };
+
   return (
     <div className={`tone-test-page app-shell instrumentLayout ${isDrums ? "hasDrumDock" : ""}`}>
       {/* Left instrument menu */}
@@ -311,6 +327,8 @@ export default function InstrumentPage({ instrument }) {
         <>
           <DrumMachine
             layout="grid"
+            drumImageScale={samplerImageScale}
+            drumKeyOpacity={samplerKeyOpacity}
             pads={drumConfig.pads}
             activeKeyIds={activeKeyIds}
             onMouseDownKey={handleKeyMouseDown}
@@ -334,14 +352,16 @@ export default function InstrumentPage({ instrument }) {
           onClose={() => setShowDrumCustomize(false)}
           drumConfig={drumConfig}
 
-          /* General tab only applies to drums */
-          drumImageScale={isDrums ? drumImageScale : undefined}
-          setDrumImageScale={isDrums ? setDrumImageScale : undefined}
-          drumKeyOpacity={isDrums ? drumKeyOpacity : undefined}
-          setDrumKeyOpacity={isDrums ? setDrumKeyOpacity : undefined}
-          onResetLayout={isDrums ? resetDrumLayout : undefined}
+          drumImageScale={isDrums ? drumImageScale : samplerImageScale}
+          setDrumImageScale={isDrums ? setDrumImageScale : setSamplerImageScale}
+
+          drumKeyOpacity={isDrums ? drumKeyOpacity : samplerKeyOpacity}
+          setDrumKeyOpacity={isDrums ? setDrumKeyOpacity : setSamplerKeyOpacity}
+
+          onResetLayout={isDrums ? resetDrumLayout : resetSamplerLayout}
         />
       )}
+
 
       {/* Modals */}
       <TrackFxModal
