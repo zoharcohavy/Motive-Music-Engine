@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import DrumImage from "../../../assets/images/DrumImage.jpeg";
 import kickSample from "../../../assets/drum_samples/kick.wav";
 import snareSample from "../../../assets/drum_samples/snare.mp3";
@@ -41,9 +41,79 @@ export default function DrumKeyboard({
   drumImageScale = 1.25,
   drumKeyOpacity = 0.55,
   drumAnchors,
+  setDrumAnchors,
 }) {
 
   const [isMouseDown, setIsMouseDown] = useState(false);
+
+  // Only allow moving when the customize panel is open and we have a setter.
+  const overlayRef = useRef(null);
+  const dragRef = useRef({
+    padId: null,
+    startX: 0,
+    startY: 0,
+    pointerId: null,
+  });
+
+  const beginDrag = (padId, e) => {
+    if (!setDrumAnchors || layout !== "kit") return;
+
+    const p = e;
+    dragRef.current = {
+      padId,
+      startX: p.clientX,
+      startY: p.clientY,
+      pointerId: p.pointerId ?? null,
+    };
+
+    // capture so we keep getting events even if cursor leaves the button
+    try {
+      e.currentTarget?.setPointerCapture?.(p.pointerId);
+    } catch {
+      // ignore
+    }
+  };
+
+  const endDrag = () => {
+    dragRef.current = { padId: null, startX: 0, startY: 0, pointerId: null };
+    setIsMouseDown(false);
+  };
+
+  useEffect(() => {
+      if (!setDrumAnchors || layout !== "kit") return;
+
+    const onMove = (e) => {
+      const { padId } = dragRef.current;
+      if (padId == null) return;
+
+      const overlayEl = overlayRef.current;
+      if (!overlayEl) return;
+
+      const rect = overlayEl.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+
+      const x = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+      const y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height));
+
+      setDrumAnchors((prev) => ({
+        ...(prev || {}),
+        [padId]: { x, y },
+      }));
+    };
+
+    const onUp = () => endDrag();
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [setDrumAnchors, layout]);
+
 
   const isActive = (padId) =>
     Array.isArray(activeKeyIds) && activeKeyIds.includes(padId);
@@ -76,14 +146,16 @@ export default function DrumKeyboard({
             <img className="drumKb__img" src={DrumImage} alt="Drum kit" />
 
             <div
+              ref={overlayRef}
               className="drumKb__overlay"
-              onMouseDown={(e) => {
+              onPointerDown={(e) => {
                 e.preventDefault();
                 setIsMouseDown(true);
               }}
-              onMouseUp={() => setIsMouseDown(false)}
-              onMouseLeave={() => setIsMouseDown(false)}
+              onPointerUp={() => setIsMouseDown(false)}
+              onPointerLeave={() => setIsMouseDown(false)}
             >
+
               {pads.map((pad) => {
                 const anchor = drumAnchors?.[pad.id] || { x: 0.5, y: 0.5 };
 
@@ -107,14 +179,12 @@ export default function DrumKeyboard({
                       top: `${anchor.y * 100}%`,
                       opacity: Number(drumKeyOpacity ?? 0.55),
                     }}
-                    onMouseDown={(e) => {
+                    onPointerDown={(e) => {
                       e.preventDefault();
-                      setIsMouseDown(true);
-                      onMouseDownKey?.(pad);
+                      beginDrag(pad.id, e);
                     }}
-                    onMouseEnter={() => {
-                      if (isMouseDown) onMouseEnterKey?.(pad);
-                    }}
+
+                    onPointerUp={() => endDrag()}
                     title={`${pretty}`}
                   >
                     <div className="drumKb__keycapChar">{pretty}</div>

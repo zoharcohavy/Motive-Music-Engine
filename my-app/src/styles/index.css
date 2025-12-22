@@ -315,16 +315,6 @@ select:focus, button:focus, input:focus {
   background: rgba(255, 255, 255, 0.04);
 }
 
-.fxModal__inline {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex: 1;
-  min-width: 160px;
-}
-
-.fxModal__label { font-size: 0.8rem; opacity: 0.8; }
-
 .fxModal__actions {
   display: flex;
   justify-content: flex-end;
@@ -343,66 +333,11 @@ select:focus, button:focus, input:focus {
   text-align: center;
 }
 
-.fxModal__sliderBox {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(255,255,255,0.10);
-  background: rgba(255,255,255,0.03);
-}
-
-.fxModal__sliderLabel {
-  font-size: 0.78rem;
-  opacity: 0.85;
-  width: 58px;
-}
-
 /* ---------- DRUM OVERLAY LAYOUT ---------- */
 .drumOverlay {
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-.drumOverlay__controls {
-  padding: 10px;
-}
-
-.drumOverlay__row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.drumOverlay__row input[type="range"] {
-  flex: 1;
-}
-
-.drumOverlay__label {
-  width: 150px;
-  font-size: 0.85rem;
-  opacity: 0.85;
-}
-
-.drumOverlay__value {
-  width: 56px;
-  text-align: right;
-  font-size: 0.82rem;
-  opacity: 0.8;
-}
-
-.drumOverlay__row--actions {
-  margin-top: 6px;
-  justify-content: space-between;
-}
-
-.drumOverlay__hint {
-  font-size: 0.82rem;
-  opacity: 0.75;
 }
 
 .drumOverlay__imageWrap {

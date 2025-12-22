@@ -297,6 +297,7 @@ export default function InstrumentPage({ instrument }) {
             drumImageScale={drumImageScale}
             drumKeyOpacity={drumKeyOpacity}
             drumAnchors={drumAnchors}
+            setDrumAnchors={setDrumAnchors}
             pads={drumConfig.pads}
             activeKeyIds={activeKeyIds}
             onMouseDownKey={handleKeyMouseDown}

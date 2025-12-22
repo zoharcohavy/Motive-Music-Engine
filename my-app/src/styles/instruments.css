@@ -266,6 +266,8 @@
   background: rgba(6, 24, 28, 0.55);
   border: 1px solid rgba(163, 255, 232, 0.12);
   border-radius: 14px;
+  z-index: 50;
+
 }
 
 
@@ -430,34 +432,13 @@
   text-overflow: ellipsis;
 }
 
-.drumCustomTopRow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-}
-
-/* Fits "Pad 15" tightly */
-.drumCustomPadLabel {
-  flex: 0 0 auto;
-  width: 56px;
-  white-space: nowrap;
-}
-
-/* Fits "Key: SPACE" without pushing layout */
-.drumCustomKeyBtn {
-  flex: 0 0 auto;
-  padding: 0 8px;
-  white-space: nowrap;
-}
-
 .drumKb__kitBox {
   position: relative;
   transform-origin: center top; /* scale from center */
   display: inline-block;
 }
 
-.drumKb__img {
+.drumKb__kitBox .drumKb__img {
   width: min(900px, 92vw);
   height: auto;
   object-fit: contain;
@@ -488,6 +469,8 @@
 
   cursor: pointer;
   user-select: none;
+  touch-action: none;
+
 }
 
 .drumKb__keycapChar {
@@ -574,14 +557,4 @@
 .drumCustomOverlay {
   background: rgba(0, 0, 0, 0.85) !important;
   backdrop-filter: blur(2px);
-}
-
-/* Safety: make sure overlay is always above the fixed drum dock */
-.roomModal__overlay {
-  z-index: 9999;
-}
-
-/* Ensure drum dock doesn't compete */
-.drum-keypad-container {
-  z-index: 50;
 }

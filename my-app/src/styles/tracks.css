@@ -106,6 +106,7 @@
 
 .trackSection__trackRow {
   display: flex;
+  position: relative;
   align-items: stretch;
   width: 100%;
   gap: 0.5rem;
@@ -138,19 +139,6 @@
   cursor: pointer;
   text-align: left;
 }
-
-/* Small buttons that should still look like the main .btn style */
-.btn--compact {
-  padding: 0.22rem 0.55rem;
-  border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.15);
-  background: rgba(255,255,255,0.06);
-  color: inherit;
-  cursor: pointer;
-  line-height: 1;
-}
-.btn--compact:hover { background: rgba(255,255,255,0.10); }
-.btn--compact:active { transform: translateY(1px); }
 
 /* prevent global button hover changes */
 .trackSection__trackBtn:hover {
@@ -233,15 +221,9 @@
   box-sizing: border-box;
   padding: 6px 8px;
   border-radius: 8px;
+  font-size: 0.9rem;
 }
 
-
-.trackSection__trackRow {
-  display: flex;
-  align-items: stretch;
-  width: 100%;
-  position: relative;
-}
 
 .trackSection__trackResizeHandle {
   position: absolute;
@@ -261,23 +243,6 @@
   touch-action: none;
   background: rgba(255,255,255,0.08);
   flex: 0 0 auto;
-}
-
-.trackSection__trackResizeHandle {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 6px;
-  cursor: row-resize;
-  user-select: none;
-  touch-action: none;
-}
-
-
-.trackSection__trackNameInput {
-  width: 100%;
-  font-size: 0.9rem;
 }
 
 .trackSection__deleteBtn {
