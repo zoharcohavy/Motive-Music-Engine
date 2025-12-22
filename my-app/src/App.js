@@ -1,7 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import PianoPage from "./pages/PianoPage";
-import DrumPage from "./pages/DrumPage";
-import SamplerPage from "./pages/SamplerPage";
+import InstrumentPage from "./pages/InstrumentPage";
 
 export default function App() {
   return (
@@ -11,11 +9,10 @@ export default function App() {
         <Route path="/" element={<Navigate to="/piano" replace />} />
 
         {/* Instruments */}
-        <Route path="/piano" element={<PianoPage />} />
-        <Route path="/drum" element={<DrumPage />} />
+        <Route path="/piano" element={<InstrumentPage instrument="piano" />} />
+        <Route path="/drum" element={<InstrumentPage instrument="drums" />} />
+        <Route path="/sampler" element={<InstrumentPage instrument="sampler" />} />
 
-        {/* Plain sampler (currently a copy of drums UI) */}
-        <Route path="/sampler" element={<SamplerPage />} />
       </Routes>
     </BrowserRouter>
   );

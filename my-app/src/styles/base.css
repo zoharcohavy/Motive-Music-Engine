@@ -1,18 +1,3 @@
-/* Shared layout helpers */
-.row {
-  display: flex;
-  align-items: center;
-}
-
-.col {
-  display: flex;
-  flex-direction: column;
-}
-
-.spacer {
-  flex: 1;
-}
-
 /* Buttons */
 .btn {
   padding: 0.3rem 0.8rem;
@@ -48,19 +33,3 @@
 }
 .btn--compact:hover { background: rgba(255,255,255,0.10); }
 .btn--compact:active { transform: translateY(1px); }
-
-
-/* Inputs */
-.input {
-  width: 100%;
-  padding: 0.45rem 0.55rem;
-  border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.15);
-  background: rgba(0,0,0,0.25);
-  color: inherit;
-}
-
-.input:focus {
-  outline: none;
-  border-color: rgba(255,255,255,0.28);
-}
