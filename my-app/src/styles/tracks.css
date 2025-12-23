@@ -270,3 +270,43 @@
   border-radius: 4px;
   letter-spacing: 0.2px;
 }
+
+/* ------------------------------
++   NEW: per-track + transport buttons
++--------------------------------- */
+.trackSection__globalRecBtn {
+  font-weight: 700;
+  border: 1px solid #a33;
+}
+.trackSection__globalRecBtn--active {
+  box-shadow: 0 0 0 2px rgba(255,0,0,0.25);
+}
+
+.trackSection__inputBtn {
+  font-weight: 600;
+}
+
+.trackSection__recSwitch {
+  font-weight: 800;
+  width: 32px;
+}
+.trackSection__recSwitch--on {
+  border: 1px solid #b11;
+}
+
+.trackSection__muteBtn,
+.trackSection__soloBtn {
+  width: 32px;
+  font-weight: 800;
+}
+
+.trackSection__muteBtn--active,
+.trackSection__soloBtn--active {
+  box-shadow: 0 0 0 2px rgba(255,255,255,0.15);
+}
+.trackSection__ifaceBtn {
+  font-weight: 700;
+}
+.trackSection__ifaceBtn--on {
+  border: 1px solid #66ff99;
+}

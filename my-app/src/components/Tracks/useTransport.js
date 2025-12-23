@@ -272,6 +272,7 @@ export function useTransport({
                     offsetSeconds: desiredTime,
                     effectsOverride: track.effects || [],
                     gain: 1,
+                    trackId: track.id,
                   })
                 ).then((handle) => {
                   if (handle) activeMap.set(key, handle);

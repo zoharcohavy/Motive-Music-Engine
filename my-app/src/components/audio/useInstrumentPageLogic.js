@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useEffect, useState } from "react";
 import { useAudioEngine } from "./Engines/useAudioEngine";
 import { useRoom } from "../Rooms/useRoom";
 import { useTrackModel } from "../Tracks/useTrackModel";
@@ -55,8 +55,31 @@ export function useInstrumentPageLogic() {
   // - globalZoom, changeZoom
   // - mouseMode, setMouseMode
   // - handleGlobalPlay, handleTrackStripMouseDown, handleTrackStripMouseMove
-  const trackModel = useTrackModel({ playClipUrl: audioEngine.playUrl });
-  
+  // Wrap clip playback so each clip routes through its track bus (mute/solo)
+  const playClipUrl = (url, opts = {}) => {
+    const trackId = opts.trackId;
+    const destinationNode =
+      typeof trackId === "number" ? audioEngine.getOrCreateTrackBus(trackId) : null;
+
+    return audioEngine.playUrl(url, { ...opts, destinationNode });
+  };
+
+  const trackModel = useTrackModel({ playClipUrl });
+
+  // Keep audio routing in sync with track mute/solo and live inputs
+  useEffect(() => {
+    audioEngine.syncTrackBuses(trackModel.tracks);
+
+    // Update live inputs (device + FX) for any tracks that have an input selected
+    (trackModel.tracks || []).forEach((t) => {
+      if (t.inputDeviceId) {
+        audioEngine.updateLiveInputForTrack(t.id, t.inputDeviceId, t.effects || []);
+      } else {
+        // ensure disconnected if cleared
+        audioEngine.updateLiveInputForTrack(t.id, null, []);
+      }
+    });
+  }, [audioEngine, trackModel.tracks]);
   // --- Recording (MediaRecorder) ---
   // New hook signature:
   //   useRecording({
@@ -72,7 +95,6 @@ export function useInstrumentPageLogic() {
     trackCanvasRefs: trackModel.trackCanvasRefs,
     tracksRef: trackModel.tracksRef,
     setTracks: trackModel.setTracks,
-    activeRecordingTrackId: trackModel.activeRecordingTrackId,
     setActiveRecordingTrackId: trackModel.setActiveRecordingTrackId,
 
     setHeadTimeSeconds: trackModel.setHeadTimeSeconds,
@@ -102,17 +124,23 @@ export function useInstrumentPageLogic() {
     const selectedFx = sel?.effects || [];
 
     // Play piano note OR drum sample (through selected track FX)
+    const dest = audioEngine.getOrCreateTrackBus?.(trackModel.selectedTrackId);
+
+    // Play piano note OR drum sample (through selected track FX) AND route into selected track bus
     if (hasSample && audioEngine.playSample) {
       audioEngine.playSample(key.sampleUrl, {
         source: "local",
         effectsOverride: selectedFx,
+        destinationNode: dest,
       });
     } else if (hasFreq) {
       audioEngine.playNote(key.freq, {
         source: "local",
         effectsOverride: selectedFx,
+        destinationNode: dest,
       });
     }
+
 
 
     // Clear highlight shortly after
@@ -141,17 +169,23 @@ export function useInstrumentPageLogic() {
     const selectedFx = sel?.effects || [];
 
     // Play through selected track FX
+    const dest = audioEngine.getOrCreateTrackBus?.(trackModel.selectedTrackId);
+
+    // Play piano note OR drum sample (through selected track FX) AND route into selected track bus
     if (hasSample && audioEngine.playSample) {
       audioEngine.playSample(key.sampleUrl, {
         source: "local",
         effectsOverride: selectedFx,
+        destinationNode: dest,
       });
     } else if (hasFreq) {
       audioEngine.playNote(key.freq, {
         source: "local",
         effectsOverride: selectedFx,
+        destinationNode: dest,
       });
     }
+
 
 
     setTimeout(() => {
@@ -293,6 +327,10 @@ export function useInstrumentPageLogic() {
     // ===== Tracks =====
     tracks: trackModel.tracks,
     setTrackEffects: trackModel.setTrackEffects,
+    toggleTrackRecEnabled: trackModel.toggleTrackRecEnabled,
+    toggleTrackMuted: trackModel.toggleTrackMuted,
+    toggleTrackSolo: trackModel.toggleTrackSolo,
+    setTrackInputDevice: trackModel.setTrackInputDevice,
     viewStartTime: trackModel.viewStartTime,
     setViewStartTime: trackModel.setViewStartTime,
     headTimeSeconds: trackModel.headTimeSeconds,
@@ -308,9 +346,9 @@ export function useInstrumentPageLogic() {
     MIN_TRACK_HEIGHT_PX: trackModel.MIN_TRACK_HEIGHT_PX,
     MAX_TRACK_HEIGHT_PX: trackModel.MAX_TRACK_HEIGHT_PX,
 
-    activeRecordingTrackId: trackModel.activeRecordingTrackId,
-
     // ===== Recording controls + recordings list =====
+    isGlobalRecording: recording.isGlobalRecording,
+    toggleGlobalRecord: recording.toggleGlobalRecord,
     recordings: recording.recordings,
     recordingsError: recording.recordingsError,
     storageFiles: recording.storageFiles,
