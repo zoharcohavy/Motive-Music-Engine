@@ -9,6 +9,11 @@ export function useAudioEngine(options = {}) {
   const analyserRef = useRef(null);
   const masterGainRef = useRef(null);
   const recordDestRef = useRef(null);
+  // NEW: per-track buses (mute/solo) + live input monitoring
+  const trackBusRef = useRef(new Map()); // trackId -> GainNode
+  const liveInputRef = useRef(new Map()); // trackId -> { stream, sourceNode, lastEffectsKey, deviceId }
+  const trackRecordDestRef = useRef(new Map()); // trackId -> MediaStreamDestination
+
   const mediaRecorderRef = useRef(null);
   const recordingChunksRef = useRef([]);
   const waveCanvasRef = useRef(null);
@@ -126,7 +131,17 @@ export function useAudioEngine(options = {}) {
   const getAudioContext = () => {
     if (!audioCtxRef.current) {
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      const ctx = new AudioCtx();
+
+      // Ask the browser for the lowest practical latency
+      const ctx = new AudioCtx({
+        latencyHint: "interactive",
+        // Optional: if you want to try matching common interface rates:
+        // sampleRate: 48000,
+      });
+
+      // Make sure it’s actually running (some browsers start suspended)
+      ctx.resume?.().catch(() => {});
+
       audioCtxRef.current = ctx;
 
       const analyser = ctx.createAnalyser();
@@ -198,10 +213,13 @@ export function useAudioEngine(options = {}) {
   };
 
 
-  // Connect an input node through the given FX chain into masterGain.
-  const connectThroughFx = async (ctx, inputNode, fxChainRaw) => {
+  // Connect an input node through the given FX chain into destination (defaults to masterGain).
+  // Returns { output, limitedChain } where output is the last node in the chain.
+  const connectThroughFx = async (ctx, inputNode, fxChainRaw, destinationNode) => {
     const masterGain = masterGainRef.current;
-    if (!ctx || !masterGain) return { output: null };
+    if (!ctx || !masterGain || !inputNode) return { output: null, limitedChain: [] };
+
+    const destination = destinationNode || masterGain;
 
     // Back-compat: allow old string effect values
     const fxChain = Array.isArray(fxChainRaw)
@@ -236,9 +254,11 @@ export function useAudioEngine(options = {}) {
 
         const sum = ctx.createGain();
 
+        // Dry path
         last.connect(dryGain);
         dryGain.connect(sum);
 
+        // Wet path
         last.connect(convolver);
         convolver.connect(wetGain);
         wetGain.connect(sum);
@@ -248,14 +268,165 @@ export function useAudioEngine(options = {}) {
       }
     }
 
-    last.connect(masterGain);
+    last.connect(destination);
     return { output: last, limitedChain };
   };
+
+    // ----------------------------
+  // Per-track bus routing (mute/solo) + live input monitoring
+  // ----------------------------
+
+  const getOrCreateTrackBus = (trackId) => {
+    const ctx = getAudioContext();
+    const masterGain = masterGainRef.current;
+    if (!ctx || !masterGain) return null;
+
+    const map = trackBusRef.current;
+    if (map.has(trackId)) return map.get(trackId);
+
+    const g = ctx.createGain();
+    g.gain.value = 1;
+
+    // Track bus feeds the normal output
+    g.connect(masterGain);
+
+    map.set(trackId, g);
+    return g;
+  };
+
+    const getOrCreateTrackRecordDest = (trackId) => {
+    const ctx = getAudioContext();
+    if (!ctx) return null;
+
+    const map = trackRecordDestRef.current;
+    if (map.has(trackId)) return map.get(trackId);
+
+    const dest = ctx.createMediaStreamDestination();
+
+    // IMPORTANT: record from the track bus (post mute/solo gain)
+    const bus = getOrCreateTrackBus(trackId);
+    if (bus) bus.connect(dest);
+
+    map.set(trackId, dest);
+    return dest;
+  };
+
+  const getTrackRecordStream = (trackId) => {
+    const dest = getOrCreateTrackRecordDest(trackId);
+    return dest?.stream || null;
+  };
+
+  // Apply mute/solo to track buses:
+  // - if any solo exists, non-solo tracks are muted
+  // - mute always mutes that track
+  const syncTrackBuses = (tracks) => {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const list = Array.isArray(tracks) ? tracks : [];
+    const hasSolo = list.some((t) => !!t.isSolo);
+
+    for (const t of list) {
+      const bus = getOrCreateTrackBus(t.id);
+      if (!bus) continue;
+
+      const shouldMute = !!t.isMuted || (hasSolo && !t.isSolo);
+      bus.gain.value = shouldMute ? 0 : 1;
+    }
+  };
+
+  // Live input: connect selected audio input device to a track bus THROUGH that track's FX
+  const updateLiveInputForTrack = async (trackId, deviceId, fxChainRaw) => {
+    const ctx = getAudioContext();
+    if (!ctx || !navigator?.mediaDevices?.getUserMedia) return;
+
+    const map = liveInputRef.current;
+    const prev = map.get(trackId);
+
+    // If clearing device, tear down existing
+    if (!deviceId) {
+      if (prev) {
+        try { prev.sourceNode?.disconnect?.(); } catch (e) {}
+        try { prev.stream?.getTracks?.().forEach((tr) => tr.stop()); } catch (e) {}
+        map.delete(trackId);
+      }
+      return;
+    }
+
+    // If device changed, tear down old
+    if (prev && prev.deviceId !== deviceId) {
+      try { prev.sourceNode?.disconnect?.(); } catch (e) {}
+      try { prev.stream?.getTracks?.().forEach((tr) => tr.stop()); } catch (e) {}
+      map.delete(trackId);
+    }
+
+    const effectsKey = JSON.stringify(
+      Array.isArray(fxChainRaw) ? fxChainRaw : [{ type: String(fxChainRaw || "none") }]
+    );
+
+    const cur = map.get(trackId);
+    const needsRewire = !cur || cur.effectsKey !== effectsKey;
+
+    let stream = cur?.stream;
+    if (!stream) {
+      // Ensure the context is running before wiring monitoring
+      await ctx.resume?.().catch(() => {});
+
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: { exact: deviceId },
+
+          // Critical: disable conferencing features that add latency
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false,
+
+          // Hint to reduce buffering (not honored everywhere, but helps when it is)
+          latency: 0,
+
+          // Optional: helps avoid some resamplers / extra processing
+          channelCount: 1,
+        },
+      });
+
+    }
+
+    if (needsRewire) {
+      if (cur?.sourceNode) {
+        try { cur.sourceNode.disconnect(); } catch (e) {}
+      }
+
+      const sourceNode = ctx.createMediaStreamSource(stream);
+      const trackBus = getOrCreateTrackBus(trackId);
+      if (!trackBus) return;
+
+      // Route: input -> FX -> track bus -> master
+      await connectThroughFx(ctx, sourceNode, fxChainRaw, trackBus);
+
+      map.set(trackId, {
+        stream,
+        sourceNode,
+        deviceId,
+        effectsKey,
+      });
+    } else {
+      // keep stream/device updated
+      map.set(trackId, { ...cur, stream, deviceId });
+    }
+  };
+
+  // Helper to list inputs for your "Input" button modal
+  const listAudioInputs = async () => {
+    if (!navigator?.mediaDevices?.enumerateDevices) return [];
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.filter((d) => d.kind === "audioinput");
+  };
+
 
   // Play an audio URL through the FX chain (used for clips + drum samples)
   const playUrl = async (
     url,
-    { offsetSeconds = 0, effectsOverride, gain = 1 } = {}
+    { offsetSeconds = 0, effectsOverride, gain = 1, destinationNode } = {}
   ) => {
     if (!url) return null;
 
@@ -274,7 +445,7 @@ export function useAudioEngine(options = {}) {
 
     sourceNode.connect(g);
 
-    await connectThroughFx(ctx, g, effectsOverride ?? effects);
+    await connectThroughFx(ctx, g, effectsOverride ?? effects, destinationNode);
 
     try {
       sourceNode.start(0, Math.max(0, offsetSeconds));
@@ -296,8 +467,9 @@ export function useAudioEngine(options = {}) {
 
   const playNote = async (
     freq,
-    { source = "local", waveformOverride, effectsOverride } = {}
+    { source = "local", waveformOverride, effectsOverride, destinationNode } = {}
   ) => {
+
     const ctx = getAudioContext();
     const masterGain = masterGainRef.current;
     if (!ctx || !masterGain) return;
@@ -367,7 +539,11 @@ export function useAudioEngine(options = {}) {
 
 
     last.connect(gainNode);
-    gainNode.connect(masterGain);
+    const destination = destinationNode || masterGain;
+    gainNode.connect(destination);
+
+
+
 
 
     oscillator.start();
@@ -392,13 +568,19 @@ export function useAudioEngine(options = {}) {
     sampleUrl,
     {
       source: _source = "local",
-      // You could later add per-sample gain or other options here
       effectsOverride,
+      destinationNode,
     } = {}
   ) => {
+
     if (!sampleUrl) return;
 
-    const handle = await playUrl(sampleUrl, { offsetSeconds: 0, effectsOverride });
+    const handle = await playUrl(sampleUrl, {
+      offsetSeconds: 0,
+      effectsOverride,
+      destinationNode,
+    });
+
     void handle;
 
 
@@ -461,6 +643,8 @@ export function useAudioEngine(options = {}) {
 
     // low-level helpers
     getAudioContext,
+    getTrackRecordStream,
+
 
     // actions
     playNote,
@@ -468,5 +652,10 @@ export function useAudioEngine(options = {}) {
     playUrl,
     playRemoteNote,
     setEffectFromRoom,
+
+    getOrCreateTrackBus,
+    syncTrackBuses,
+    updateLiveInputForTrack,
+    listAudioInputs,
   };
 }

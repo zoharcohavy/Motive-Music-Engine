@@ -58,8 +58,13 @@ export default function InstrumentPage({ instrument }) {
     MIN_TRACK_HEIGHT_PX,
     MAX_TRACK_HEIGHT_PX,
 
-    handleTrackRecordToggle,
-    activeRecordingTrackId,
+    toggleGlobalRecord,
+    isGlobalRecording,
+
+    toggleTrackRecEnabled,
+    toggleTrackMuted,
+    toggleTrackSolo,
+    setTrackInputDevice,
     isTransportPlaying,
 
 
@@ -99,9 +104,78 @@ export default function InstrumentPage({ instrument }) {
     []
   );
 
+  const [interfaceTrackId, setInterfaceTrackId] = useState(null);
+    const [isInputModalOpen, setIsInputModalOpen] = useState(false);
+  const [audioInputs, setAudioInputs] = useState([]);
+  const [selectedInputDeviceId, setSelectedInputDeviceId] = useState("");
+
+  const closeInputModal = () => {
+    setIsInputModalOpen(false);
+    setInterfaceTrackId(null);
+  };
+
+  // IMPORTANT: to make devices like “Audient iD14” show up with labels,
+  // request permission once (labels are often blank until permission is granted).
+  const refreshAudioInputs = async () => {
+    if (!navigator?.mediaDevices?.enumerateDevices) {
+      setAudioInputs([]);
+      return;
+    }
+
+    // Ask for permission (then stop immediately)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+    } catch (e) {
+      // If denied, device IDs may still appear but labels may be blank
+    }
+
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const inputs = devices.filter((d) => d.kind === "audioinput");
+      setAudioInputs(inputs);
+    } catch (e) {
+      setAudioInputs([]);
+    }
+  };
+
+  const openInterfaceModal = async (trackId) => {
+    const t = (tracks || []).find((x) => x.id === trackId);
+    setSelectedInputDeviceId(t?.inputDeviceId || "");
+    setInterfaceTrackId(trackId);
+
+    await refreshAudioInputs(); // <-- this makes Audient iD14 appear reliably
+    setIsInputModalOpen(true);
+  };
+
+  const applyInterfaceDevice = () => {
+    if (interfaceTrackId == null) return;
+    const deviceId = selectedInputDeviceId || null;
+    setTrackInputDevice(interfaceTrackId, deviceId);
+    setIsInputModalOpen(false);
+    setInterfaceTrackId(null);
+  };
+
+
 
   const [showDrumCustomize, setShowDrumCustomize] = useState(false);
   const [fxModalTrackId, setFxModalTrackId] = useState(null);
+
+
+    // Load once on mount (also triggers permission request so labels populate)
+  useEffect(() => {
+    refreshAudioInputs();
+  }, []);
+
+  // If you plug/unplug the Audient while the app is open, update the dropdown
+  useEffect(() => {
+    if (!navigator?.mediaDevices?.addEventListener) return;
+
+    const onChange = () => refreshAudioInputs();
+    navigator.mediaDevices.addEventListener("devicechange", onChange);
+    return () => navigator.mediaDevices.removeEventListener("devicechange", onChange);
+  }, []);
+
 
   const fxTrack = useMemo(
     () => (tracks || []).find((t) => t.id === fxModalTrackId) || null,
@@ -156,7 +230,7 @@ export default function InstrumentPage({ instrument }) {
   useInstrumentHotkeys({
     onPlay: handleGlobalPlay,
     onToggleRecord: () => {
-      if (selectedTrackId != null) handleTrackRecordToggle(selectedTrackId);
+      toggleGlobalRecord?.();
     },
     triggerChar,
   });
@@ -297,9 +371,17 @@ export default function InstrumentPage({ instrument }) {
         MIN_TRACK_HEIGHT_PX={MIN_TRACK_HEIGHT_PX}
         MAX_TRACK_HEIGHT_PX={MAX_TRACK_HEIGHT_PX}
 
-        handleTrackRecordToggle={handleTrackRecordToggle}
+        onToggleGlobalRecord={toggleGlobalRecord}
+        isGlobalRecording={isGlobalRecording}
+        
+
+        toggleTrackRecEnabled={toggleTrackRecEnabled}
+        toggleTrackMuted={toggleTrackMuted}
+        toggleTrackSolo={toggleTrackSolo}
+        onOpenInterface={openInterfaceModal}
+
+
         handleTrackUpload={handleTrackUpload}
-        activeRecordingTrackId={activeRecordingTrackId}
         mouse_interactions={mouse_interactions}
         trackCanvasRefs={trackCanvasRefs}
         onOpenFx={openFxForTrack}
@@ -374,6 +456,40 @@ export default function InstrumentPage({ instrument }) {
           setTrackEffects?.(fxModalTrackId, next);
         }}
       />
+      {/* Input modal */}
+      {isInputModalOpen && (
+        <div className="fxModal__overlay" onMouseDown={closeInputModal}>
+          <div className="fxModal__panel" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="fxModal__header">
+              <div className="fxModal__title">Interface (This Track)</div>
+              <button className="btn" onClick={closeInputModal} type="button">
+                Close
+              </button>
+            </div>
+            <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+              <label style={{ minWidth: 80 }}>Device</label>
+              <select
+                value={selectedInputDeviceId}
+                onChange={(e) => setSelectedInputDeviceId(e.target.value)}
+              >
+                <option value="">(Disconnected)</option>
+                {audioInputs.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label || `Input ${d.deviceId.slice(0, 6)}...`}
+                  </option>
+                ))}
+              </select>
+              <button className="btn btn-primary" onClick={applyInterfaceDevice} type="button">
+                Apply
+              </button>
+
+            </div>
+            <p style={{ marginTop: 10, opacity: 0.85 }}>
+              Once connected, you should hear the selected input routed through the selected track&apos;s effects.
+            </p>
+          </div>
+        </div>
+      )}
 
 
       {/* Room modal */}

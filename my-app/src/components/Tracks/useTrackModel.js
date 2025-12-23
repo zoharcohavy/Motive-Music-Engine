@@ -24,6 +24,10 @@ export function useTrackModel(options = {}) {
       clips: [], // [{ id, url, duration, startTime, image }]
       // legacy fields (kept so old code doesn’t crash if it still references them):
       effects: [],
+      isMuted: false,
+      isSolo: false,
+      isRecEnabled: false,
+      inputDeviceId: null,
       hasRecording: false,
       recordingUrl: null,
       recordingDuration: 0,
@@ -119,6 +123,10 @@ export function useTrackModel(options = {}) {
         headPos: 0,
         clips: [],
         effects: [],
+        isMuted: false,
+        isSolo: false,
+        isRecEnabled: false,
+        inputDeviceId: null,
         hasRecording: false,
         recordingUrl: null,
         recordingDuration: 0,
@@ -129,6 +137,34 @@ export function useTrackModel(options = {}) {
       },
     ]);
     setNextTrackId((id) => id + 1);
+  };
+
+  const toggleTrackMuted = (trackId) => {
+    setTracks((prev) =>
+      prev.map((t) => (t.id === trackId ? { ...t, isMuted: !t.isMuted } : t))
+    );
+  };
+
+  const toggleTrackSolo = (trackId) => {
+    setTracks((prev) =>
+      prev.map((t) => (t.id === trackId ? { ...t, isSolo: !t.isSolo } : t))
+    );
+  };
+
+  const toggleTrackRecEnabled = (trackId) => {
+    setTracks((prev) =>
+      prev.map((t) =>
+        t.id === trackId ? { ...t, isRecEnabled: !t.isRecEnabled } : t
+      )
+    );
+  };
+
+  const setTrackInputDevice = (trackId, deviceIdOrNull) => {
+    setTracks((prev) =>
+      prev.map((t) =>
+        t.id === trackId ? { ...t, inputDeviceId: deviceIdOrNull } : t
+      )
+    );
   };
 
   // Per-track effects chain (max 5). Stored on each track.
@@ -793,6 +829,10 @@ if (track.clips && track.clips.length > 0) {
     renameTrack,
     setTrackHeightPx,
     setTrackEffects,
+    toggleTrackMuted,
+    toggleTrackSolo,
+    toggleTrackRecEnabled,
+    setTrackInputDevice,
     DEFAULT_TRACK_HEIGHT_PX,
     MIN_TRACK_HEIGHT_PX,
     MAX_TRACK_HEIGHT_PX,

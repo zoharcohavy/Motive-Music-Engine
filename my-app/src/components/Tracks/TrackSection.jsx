@@ -51,6 +51,8 @@ export default function TrackSection({
   changeZoom,
 
   handleGlobalPlay,
+  onToggleGlobalRecord,
+  isGlobalRecording,
   isTransportPlaying,
   addTrack,
   deleteTrack,
@@ -64,13 +66,16 @@ export default function TrackSection({
   MIN_TRACK_HEIGHT_PX,
   MAX_TRACK_HEIGHT_PX,
 
-  handleTrackRecordToggle,
+  toggleTrackRecEnabled,
+  toggleTrackMuted,
+  toggleTrackSolo,
   handleTrackUpload,
   activeRecordingTrackId,
   mouse_interactions,
   trackCanvasRefs,
 
   onOpenFx,
+  onOpenInterface,
 }) {
   const [editingTrackId, setEditingTrackId] = useState(null);
   const [nameDraft, setNameDraft] = useState("");
@@ -200,7 +205,13 @@ export default function TrackSection({
   <button className="btn btn-primary trackSection__playBtn" onClick={() => revealThen(handleGlobalPlay)}>
     {isTransportPlaying ? "⏸ Pause" : "▶ Play"}
   </button>
-
+  <button
+    className={`btn trackSection__globalRecBtn ${isGlobalRecording ? "trackSection__globalRecBtn--active" : ""}`}
+    onClick={() => revealThen(onToggleGlobalRecord)}
+    type="button"
+  >
+    ● Rec
+  </button>
 
 <button className="btn trackSection__addTrackBtn" onClick={addTrack}>
     + Track
@@ -325,12 +336,35 @@ export default function TrackSection({
 
               <button
                 type="button"
-                onClick={() => revealThen(() => handleTrackRecordToggle(track.id))}
-                className={`btn trackSection__recBtn ${
-                  activeRecordingTrackId === track.id ? "trackSection__recBtn--active" : ""
+                onClick={() => toggleTrackRecEnabled?.(track.id)}
+                className={`btn trackSection__recSwitch ${
+                  track.isRecEnabled !== false ? "trackSection__recSwitch--on" : ""
                 }`}
+                title="Record enable (arm)"
               >
-                Rec
+                R
+              </button>
+
+              <button
+                type="button"
+                onClick={() => toggleTrackMuted?.(track.id)}
+                className={`btn trackSection__muteBtn ${
+                  track.isMuted ? "trackSection__muteBtn--active" : ""
+                }`}
+                title="Mute"
+              >
+                M
+              </button>
+
+              <button
+                type="button"
+                onClick={() => toggleTrackSolo?.(track.id)}
+                className={`btn trackSection__soloBtn ${
+                  track.isSolo ? "trackSection__soloBtn--active" : ""
+                }`}
+                title="Solo"
+              >
+                S
               </button>
               <button
                 type="button"
@@ -355,6 +389,14 @@ export default function TrackSection({
                 title="Track effects"
               >
                 +FX
+              </button>
+              <button
+                type="button"
+                onClick={() => onOpenInterface?.(track.id)}
+                className={`btn trackSection__ifaceBtn ${track.inputDeviceId ? "trackSection__ifaceBtn--on" : ""}`}
+                title="Connect audio interface / mic to this track"
+              >
+                Interface
               </button>
 
 

@@ -16,11 +16,8 @@ export function useRecording({
   trackCanvasRefs,
   tracksRef,
   setTracks,
-  activeRecordingTrackId,
-  setActiveRecordingTrackId,
   setHeadTimeSeconds,
   getViewStartTime,
-
 } = {}) {
   if (!audioEngine) {
     throw new Error(
@@ -44,9 +41,11 @@ export function useRecording({
   const [storageError, setStorageError] = useState(null);
 
   const [isRoomRecording, setIsRoomRecording] = useState(false);
+  const [isGlobalRecording, setIsGlobalRecording] = useState(false);
 
   // Internal refs for recording session
-  const recordingTargetTrackIdRef = useRef(null);
+  const recordingTargetTrackIdsRef = useRef([]);
+  const trackRecordersRef = useRef(new Map()); // trackId -> { recorder, chunks: [] }
   const recordStartTimeRef = useRef(null);
   const recordDurationRef = useRef(0);
   const recordInitialHeadPosRef = useRef(0);
@@ -54,13 +53,9 @@ export function useRecording({
   const lastViewStartDuringRecordRef = useRef(0);
 
 
-
-  const activeRecordingTrackIdRef = useRef(activeRecordingTrackId);
-  useEffect(() => {
-    activeRecordingTrackIdRef.current = activeRecordingTrackId;
-  }, [activeRecordingTrackId]);
-
   const BASE_STRIP_SECONDS = 10;
+
+  const tempRecClipIdFor = (trackId) => `__REC_LIVE__${trackId}`;
 
   const getTrackLength = (track) => {
     const zoom = track.zoom || 1;
@@ -156,210 +151,119 @@ export function useRecording({
   }, []);
 
   // ----- create MediaRecorder when audio engine is ready -----
-  useEffect(() => {
-    const ctx = getAudioContext();
-    const masterGain = masterGainRef.current;
-    if (!ctx || !masterGain || mediaRecorderRef.current) return;
-
-    const recordDest = ctx.createMediaStreamDestination();
-    masterGain.connect(recordDest);
-
-    const mediaRecorder = new MediaRecorder(recordDest.stream);
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) {
-        recordingChunksRef.current.push(e.data);
-      }
-    };
-
-    mediaRecorder.onstop = async () => {
-      const mime = mediaRecorderRef.current?.mimeType || "audio/webm";
-      const blob = new Blob(recordingChunksRef.current, { type: mime });
-      recordingChunksRef.current = [];
-
-      const targetTrackId = recordingTargetTrackIdRef.current;
-      recordingTargetTrackIdRef.current = null;
-      setActiveRecordingTrackId(null);
-
-      const localUrl = URL.createObjectURL(blob);
-
-      if (recordStartTimeRef.current) {
-        recordDurationRef.current =
-          (performance.now() - recordStartTimeRef.current) / 1000;
-      }
-
-      let recordingImage = null;
-      if (
-        targetTrackId != null &&
-        trackCanvasRefs.current &&
-        trackCanvasRefs.current[targetTrackId]
-      ) {
-        try {
-          recordingImage =
-            trackCanvasRefs.current[targetTrackId].toDataURL("image/png");
-        } catch (e) {
-          console.warn("Could not snapshot tape canvas", e);
-        }
-      }
-
-      if (targetTrackId != null) {
-        const duration = recordDurationRef.current || 0;
-
-        setTracks((prev) =>
-          prev.map((track) => {
-            if (track.id !== targetTrackId) return track;
-
-            const trackLength = getTrackLength(track);
-            const clipStartFrac = recordInitialHeadPosRef.current || 0; // 0..1 (within visible strip)
-            const clipStartTime = recordInitialHeadTimeSecondsRef.current || 0; // absolute seconds
-
-            const newClip = {
-              id: crypto.randomUUID(),
-              url: localUrl,
-              duration,
-              startTime: clipStartTime,
-              startFrac: clipStartFrac,
-              image: recordingImage,
-            };
-
-            const existing = track.clips || [];
-
-            // Don't allow overlapping clips
-            if (willOverlap(existing, newClip)) {
-              return track;
-            }
-
-            const updatedClips = [...existing, newClip];
-
-            // Move head to the end of this new clip (0..1 across strip)
-            const stripEndTime = clipStartTime + duration;
-            const viewStart = lastViewStartDuringRecordRef.current || 0;
-            const endInView = stripEndTime - viewStart;
-            const clampedEndInView = Math.max(0, Math.min(trackLength, endInView));
-            const headPos = trackLength > 0 ? clampedEndInView / trackLength : 0;
-
-
-            return {
-              ...track,
-              clips: updatedClips,
-              headPos,
-
-              // keep legacy fields for anything still using them
-              hasRecording: true,
-              recordingUrl: localUrl,
-              recordingDuration: duration,
-              tapeHeadPos: headPos,
-              clipStartPos: clipStartFrac,
-              recordingImage,
-            };
-          })
-        );
-      }
-
-      try {
-        const formData = new FormData();
-        const safeId =
-          (typeof crypto !== "undefined" && crypto.randomUUID)
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-        formData.append("audio", blob, `recording-${safeId}.webm`);
-
-
-        await fetch(`${API_BASE}/api/recordings/upload`, {
-          method: "POST",
-          body: formData,
-        });
-
-        await fetchRecordings();
-      } catch (err) {
-        console.error("Upload failed:", err);
-      }
-    };
-
-    recordDestRef.current = recordDest;
-    mediaRecorderRef.current = mediaRecorder;
-  }, [
-    getAudioContext,
-    masterGainRef,
-    mediaRecorderRef,
-    recordDestRef,
-    recordingChunksRef,
-    trackCanvasRefs,
-    setTracks,
-    setActiveRecordingTrackId,
-  ]);
-
+ 
   // ----- animate tape head while recording -----
   useEffect(() => {
     let frameId = null;
 
     const step = () => {
       const recorder = mediaRecorderRef.current;
-      const isRecording = recorder && recorder.state === "recording";
-      const targetTrackId = recordingTargetTrackIdRef.current;
 
-      if (
-        isRecording &&
-        targetTrackId != null &&
-        recordStartTimeRef.current != null
-      ) {
+      // Consider ANY active recorder (room OR armed-track recording)
+      const anyTrackRecorderRecording = (() => {
+        const map = trackRecordersRef.current;
+        if (!map || map.size === 0) return false;
+        for (const { recorder: r } of map.values()) {
+          if (r && r.state === "recording") return true;
+        }
+        return false;
+      })();
+
+      const isRecording =
+        (recorder && recorder.state === "recording") ||
+        anyTrackRecorderRecording ||
+        isGlobalRecording;
+
+      if (isRecording && recordStartTimeRef.current != null) {
         const now = performance.now();
         const elapsedSec = (now - recordStartTimeRef.current) / 1000;
         recordDurationRef.current = elapsedSec;
 
         const tracksNow = tracksRef.current || [];
-        const track = tracksNow.find((t) => t.id === targetTrackId);
+        if (!tracksNow.length) {
+          frameId = window.requestAnimationFrame(step);
+          return;
+        }
 
-        if (track) {
-          const trackLength = getTrackLength(track);
+        // Absolute head time = (absolute start time when record began) + elapsed
+        const headTimeAbs =
+          (recordInitialHeadTimeSecondsRef.current || 0) + elapsedSec;
 
-          // Absolute head time = (absolute start time when record began) + elapsed
-          // IMPORTANT: recordInitialHeadTimeSecondsRef.current must be set when recording starts.
-          const headTimeAbs = (recordInitialHeadTimeSecondsRef.current || 0) + elapsedSec;
+        // This is what your canvases actually use to draw the yellow tapehead
+        if (typeof setHeadTimeSeconds === "function") {
+          setHeadTimeSeconds(headTimeAbs);
+        }
 
-          // Current viewport start
-          let viewStart = typeof getViewStartTime === "function" ? (getViewStartTime() || 0) : 0;
+        // Use first track as the reference for viewport length (all tracks share the same viewStart)
+        const refTrack = tracksNow[0];
+        const trackLength = getTrackLength(refTrack);
 
-          // Auto-scroll while recording: when head reaches right edge, move window forward by half
-          if (
-            typeof setViewStartTime === "function" &&
-            trackLength > 0 &&
-            headTimeAbs >= viewStart + trackLength
-          ) {
-            const nextViewStart = viewStart + trackLength / 2;
-            setViewStartTime(nextViewStart);
-            viewStart = nextViewStart;
-          }
-          lastViewStartDuringRecordRef.current = viewStart;
+        // Current viewport start
+        let viewStart =
+          typeof getViewStartTime === "function" ? getViewStartTime() || 0 : 0;
 
-          // Convert absolute head time -> headPos inside current visible window
-          const headPosUnclamped = trackLength > 0 ? (headTimeAbs - viewStart) / trackLength : 0;
-          const headPos = Math.max(0, Math.min(1, headPosUnclamped));
+        // Auto-scroll while recording: when head reaches right edge, move window forward by half
+        if (
+          typeof setViewStartTime === "function" &&
+          trackLength > 0 &&
+          headTimeAbs >= viewStart + trackLength
+        ) {
+          const nextViewStart = headTimeAbs - trackLength / 2;
+          lastViewStartDuringRecordRef.current = nextViewStart;
+          setViewStartTime(nextViewStart);
+          viewStart = nextViewStart;
+        }
 
-          // Keep the global head time updated so the yellow tapehead renders correctly
-          if (typeof setHeadTimeSeconds === "function") {
-            setHeadTimeSeconds(headTimeAbs);
-          }
+        // Update headPos for ALL tracks so the yellow head animates everywhere
+        setTracks((prev) =>
+          (prev || []).map((t) => {
+            const len = getTrackLength(t);
+            if (!len) return t;
+            const frac = (headTimeAbs - viewStart) / len;
+            const headPos = Math.max(0, Math.min(1, frac));
+            return { ...t, headPos };
+          })
+        );
+        const startTime = recordInitialHeadTimeSecondsRef.current || 0;
+        const duration = Math.max(0, recordDurationRef.current || 0);
 
-          // Collision detection should use absolute head time, not stripTime
-          const existingClips = track.clips || [];
-          const collided = existingClips.find((c) => {
-            const start = c.startTime || 0;
-            const end = (c.startTime || 0) + (c.duration || 0);
-            return headTimeAbs >= start && headTimeAbs <= end;
-          });
+        // Which tracks are being recorded (armed tracks from start)
+        const targetIds = new Set(recordingTargetTrackIdsRef.current || []);
 
-          if (collided && recorder.state === "recording") {
-            recorder.stop();
-          }
-
-
+        if (targetIds.size > 0) {
           setTracks((prev) =>
-            prev.map((t) => t.id === targetTrackId ? { ...t, headPos } : t)
+            (prev || []).map((t) => {
+              const tempId = tempRecClipIdFor(t.id);
+
+              // Remove temp clip from non-target tracks
+              if (!targetIds.has(t.id)) {
+                const cleaned = (t.clips || []).filter((c) => c.id !== tempId);
+                return cleaned.length === (t.clips || []).length ? t : { ...t, clips: cleaned };
+              }
+
+              // Add/update temp clip on target track
+              const clips = Array.isArray(t.clips) ? t.clips : [];
+              const tempClip = {
+                id: tempId,
+                startTime,
+                duration,
+                url: null,
+                image: null,
+                isTemp: true,
+              };
+
+              const idx = clips.findIndex((c) => c.id === tempId);
+              if (idx >= 0) {
+                const next = clips.slice();
+                next[idx] = tempClip;
+                return { ...t, clips: next };
+              }
+              return { ...t, clips: [...clips, tempClip] };
+            })
           );
         }
       }
-
+      // Live “growing” clip while recording
       frameId = window.requestAnimationFrame(step);
     };
 
@@ -379,33 +283,138 @@ export function useRecording({
   setHeadTimeSeconds,
 ]);
 
+  const ensureMediaRecorder = () => {
+    if (mediaRecorderRef.current) return;
 
-  // ----- recording controls -----
-  const handleTrackRecordToggle = (trackId) => {
+    const dest = recordDestRef.current;
+    if (!dest?.stream) return;
+
+    const recorder = new MediaRecorder(dest.stream);
+    mediaRecorderRef.current = recorder;
+
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        recordingChunksRef.current.push(e.data);
+      }
+    };
+
+    recorder.onstop = async () => {
+      // your existing onstop logic (upload + add clip to tracks)
+      // (do NOT put "..." here either)
+    };
+  };
+  // NEW: Global record toggle.
+  // - Start: records the master output
+  // - Stop: uploads + drops the recorded clip onto ALL tracks with isRecEnabled === true
+   const toggleGlobalRecord = async () => {
     const ctx = getAudioContext();
-    if (!ctx || !mediaRecorderRef.current) return;
+    if (!ctx) return;
 
-    const recorder = mediaRecorderRef.current;
+    // STOP
+    if (isGlobalRecording) {
+      const map = trackRecordersRef.current;
 
-    // If currently recording, stop
-    if (recorder.state === "recording") {
-      recorder.stop();
+      for (const { recorder } of map.values()) {
+        try {
+          if (recorder?.state === "recording") recorder.stop();
+        } catch (e) {}
+      }
+
+      setIsGlobalRecording(false);
+
+      // IMPORTANT: do NOT remove the temp clip here.
+      // Let recorder.onstop replace the temp clip with the final clip.
+      // (So the growing clip never disappears.)
+
+      // Reset these AFTER stop has been requested (ok to clear targets;
+      // onstop uses t.id directly and tempRecClipIdFor(t.id))
+      recordingTargetTrackIdsRef.current = [];
+      recordStartTimeRef.current = null;
+
       return;
     }
 
-    // Otherwise start recording on this track
-    recordingTargetTrackIdRef.current = trackId;
-    setActiveRecordingTrackId(trackId);
 
-    recordStartTimeRef.current = performance.now();
 
+    // START: record ONLY armed tracks
     const tracksNow = tracksRef.current || [];
-    const track = tracksNow.find((t) => t.id === trackId);
-    const headPos = track && (track.headPos != null ? track.headPos : track.tapeHeadPos || 0);
-    recordInitialHeadPosRef.current = headPos || 0;
-    // Absolute playhead time (includes viewStartTime offset)
-    recordInitialHeadTimeSecondsRef.current = typeof getHeadTimeSeconds === "function" ? (getHeadTimeSeconds() || 0) : 0;
-    recorder.start();
+    const armedTracks = tracksNow.filter((t) => t.isRecEnabled === true);
+    if (!armedTracks.length) return;
+    recordingTargetTrackIdsRef.current = armedTracks.map((t) => t.id);
+
+
+    // Prepare tapehead animation baseline
+    recordStartTimeRef.current = performance.now();
+    recordDurationRef.current = 0;
+    recordInitialHeadTimeSecondsRef.current =
+      (typeof getHeadTimeSeconds === "function" ? getHeadTimeSeconds() : 0) || 0;
+
+    // Clear previous recorders
+    trackRecordersRef.current = new Map();
+
+    // Create one MediaRecorder per armed track, recording that track's bus stream
+    for (const t of armedTracks) {
+      const stream = audioEngine.getTrackRecordStream?.(t.id);
+      if (!stream) continue;
+
+      let recorder;
+      try {
+        recorder = new MediaRecorder(stream);
+      } catch (e) {
+        continue;
+      }
+
+      const entry = { recorder, chunks: [] };
+      trackRecordersRef.current.set(t.id, entry);
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) entry.chunks.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const blob = new Blob(entry.chunks, {
+          type: recorder.mimeType || "audio/webm",
+        });
+        entry.chunks = [];
+
+        // If the blob is tiny, it's basically garbage (prevents tiny empty clips)
+        if (!blob || blob.size < 1000) return;
+
+        const url = URL.createObjectURL(blob);
+
+        // Clamp duration so you never create a near-zero clip
+        const duration = Math.max(0.05, recordDurationRef.current || 0);
+        const startTime = recordInitialHeadTimeSecondsRef.current || 0;
+
+        // Replace the live temp clip with the final recorded clip
+        setTracks((prev) =>
+          (prev || []).map((trk) => {
+            if (trk.id !== t.id) return trk;
+
+            const tempId = tempRecClipIdFor(t.id);
+            const clips = Array.isArray(trk.clips) ? trk.clips : [];
+            const withoutTemp = clips.filter((c) => c.id !== tempId);
+
+            const newClip = {
+              id: Date.now() + Math.random(),
+              url,
+              duration,
+              startTime,
+              image: null,
+            };
+
+            return { ...trk, clips: [...withoutTemp, newClip] };
+          })
+        );
+      };
+
+
+      try {
+        recorder.start();
+      } catch (e) {}
+    }
+
+    setIsGlobalRecording(true);
   };
 
   const handleRoomRecordToggle = () => {
@@ -424,7 +433,6 @@ export function useRecording({
     }
 
     // Start a new "room" recording: no specific track target
-    recordingTargetTrackIdRef.current = null;
     recordStartTimeRef.current = performance.now();
     recorder.start();
     setIsRoomRecording(true);
@@ -439,7 +447,8 @@ export function useRecording({
     uploadStorageFile,
 
     isRoomRecording,
-    handleTrackRecordToggle,
+    isGlobalRecording,
+    toggleGlobalRecord,
     handleRoomRecordToggle,
   };
 
