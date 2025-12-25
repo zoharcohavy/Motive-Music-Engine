@@ -1,19 +1,19 @@
-// src/components/audio/useRecording.js
+// src/components/audio/Engines/useRecording.js
 import { useRef, useState, useEffect } from "react";
 import { API_BASE } from "../constants";
 
 /**
- * Hook responsible for server-backed recording logic:
- * - sets up a MediaRecorder wired to the master gain
- * - manages track/room recordings
- * - uploads finished recordings and refreshes the recordings list
- * - animates the tape head while recording
+ * Recording hook:
+ * - records armed tracks (per-track MediaRecorder)
+ * - for Room Record: records armed tracks and uploads each track blob into a shared ROOMNAME:# folder
+ * - drives "live growing clip" visuals + tapehead motion while recording
  */
 export function useRecording({
   audioEngine,
+  roomId,
   getHeadTimeSeconds,
   setViewStartTime,
-  trackCanvasRefs,
+  trackCanvasRefs, // kept for signature compatibility (not used here)
   tracksRef,
   setTracks,
   setHeadTimeSeconds,
@@ -25,14 +25,7 @@ export function useRecording({
     );
   }
 
-  const {
-    getAudioContext,
-    masterGainRef,
-    recordDestRef,
-    mediaRecorderRef,
-    recordingChunksRef,
-  } = audioEngine;
-
+  const { getAudioContext } = audioEngine;
 
   // UI state
   const [recordings, setRecordings] = useState([]);
@@ -40,18 +33,30 @@ export function useRecording({
   const [storageFiles, setStorageFiles] = useState([]);
   const [storageError, setStorageError] = useState(null);
 
+  // Room session upload metadata
+  const roomSessionFolderRef = useRef(null);
+  const roomUsernameRef = useRef("Anonymous");
+
+  // Flags for UI
   const [isRoomRecording, setIsRoomRecording] = useState(false);
   const [isGlobalRecording, setIsGlobalRecording] = useState(false);
 
-  // Internal refs for recording session
-  const recordingTargetTrackIdsRef = useRef([]);
+  // Internal refs for the current recording session
+  const recordingTargetTrackIdsRef = useRef([]); // armed track ids for live-growing clips
   const trackRecordersRef = useRef(new Map()); // trackId -> { recorder, chunks: [] }
-  const recordStartTimeRef = useRef(null);
-  const recordDurationRef = useRef(0);
-  const recordInitialHeadPosRef = useRef(0);
-  const recordInitialHeadTimeSecondsRef = useRef(0);
-  const lastViewStartDuringRecordRef = useRef(0);
 
+  const recordStartTimeRef = useRef(null); // performance.now()
+  const recordDurationRef = useRef(0);
+
+  // The absolute head time (seconds) when record began
+  const recordInitialHeadTimeSecondsRef = useRef(0);
+
+  // Snapshot the viewport at record start so we don't "jump"
+  const recordViewStartAtStartRef = useRef(0);
+  const lastViewStartDuringRecordRef = useRef(0);
+  const stoppingRoomRef = useRef(false);
+  const pendingRoomStopsRef = useRef(0);
+  const stopRoomResolveRef = useRef(null);
 
   const BASE_STRIP_SECONDS = 10;
 
@@ -62,29 +67,60 @@ export function useRecording({
     return BASE_STRIP_SECONDS / zoom;
   };
 
-  const clipsOverlap = (a, b) => {
-    const aStart = a.startTime;
-    const aEnd = a.startTime + a.duration;
-    const bStart = b.startTime;
-    const bEnd = b.startTime + b.duration;
-    return Math.max(aStart, bStart) < Math.min(aEnd, bEnd);
+  const getCurrentHeadAbsSeconds = () => {
+    const tracksNow = tracksRef.current || [];
+    if (!tracksNow.length) return 0;
+
+    const viewStart =
+      typeof getViewStartTime === "function" ? (getViewStartTime() || 0) : 0;
+
+    const t0 = tracksNow[0];
+    const len = getTrackLength(t0) || 0;
+
+    // headPos is 0..1 within the current viewport; convert to absolute seconds
+    const hp = typeof t0.headPos === "number" ? t0.headPos : 0;
+    return viewStart + hp * len;
   };
 
-  const willOverlap = (clips, candidate, ignoreId = null) => {
-    return (clips || []).some((c) => {
-      if (ignoreId && c.id === ignoreId) return false;
-      return clipsOverlap(c, candidate);
-    });
+
+  // IMPORTANT:
+  // Only trust getHeadTimeSeconds() if it agrees with what we are actually drawing.
+  // Otherwise, derive from (viewStartTime + headPos * trackLength).
+  const getCurrentHeadTimeSecondsSafe = () => {
+    const tracksNow = tracksRef?.current || [];
+    const refTrack = tracksNow[0];
+    if (!refTrack) return 0;
+
+    const viewStart =
+      typeof getViewStartTime === "function" ? Number(getViewStartTime() || 0) : 0;
+
+    const len = getTrackLength(refTrack);
+    const headPos = Number(refTrack.headPos);
+    const clampedPos = Number.isFinite(headPos) ? Math.max(0, Math.min(1, headPos)) : 0;
+
+    const derived = Number.isFinite(len) && len > 0 ? viewStart + clampedPos * len : viewStart;
+
+    // Prefer provided getter ONLY if it looks consistent with the derived visual position.
+    const ht =
+      typeof getHeadTimeSeconds === "function" ? Number(getHeadTimeSeconds()) : NaN;
+
+    if (!Number.isFinite(ht)) return derived;
+
+    // If it differs too much, it's stale (this is what causes the “jump to 0”).
+    const tolerance = Number.isFinite(len) && len > 0 ? len * 0.75 : 1.0;
+    if (Math.abs(ht - derived) > tolerance) return derived;
+
+    return ht;
   };
+
+
 
   // ----- recordings list from server -----
   const fetchRecordings = async () => {
     try {
       setRecordingsError(null);
       const res = await fetch(`${API_BASE}/api/recordings`);
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setRecordings(data.recordings || data);
     } catch (err) {
@@ -96,10 +132,9 @@ export function useRecording({
   const fetchStorage = async () => {
     try {
       setStorageError(null);
-
       const res = await fetch(`${API_BASE}/api/storage`);
 
-      // If the backend doesn't support storage yet, treat it like "no files"
+      // If backend doesn't support storage yet, treat as empty
       if (res.status === 404) {
         setStorageFiles([]);
         setStorageError(null);
@@ -112,11 +147,9 @@ export function useRecording({
       setStorageFiles(Array.isArray(data.storage) ? data.storage : []);
     } catch (err) {
       setStorageFiles([]);
-      // Only show a real error if it's not a missing route
       setStorageError(err?.message || String(err));
     }
   };
-
 
   const uploadStorageFile = async (file) => {
     if (!file) throw new Error("No file provided");
@@ -131,17 +164,15 @@ export function useRecording({
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-
       const cleanMessage =
         text.includes("Cannot POST")
           ? "Upload route not found on backend (POST /api/storage/upload). Check API_BASE and server routes."
           : text || `Upload failed (HTTP ${res.status})`;
-
       throw new Error(cleanMessage);
     }
 
     const data = await res.json(); // { filename }
-    fetchStorage(); // refresh library list
+    fetchStorage(); // refresh
     return data;
   };
 
@@ -150,16 +181,47 @@ export function useRecording({
     fetchStorage();
   }, []);
 
-  // ----- create MediaRecorder when audio engine is ready -----
- 
-  // ----- animate tape head while recording -----
+  // ---------- Room upload helper (per-track blob) ----------
+  const uploadRoomTrackBlob = async ({
+    blob,
+    sessionFolder,
+    username,
+    trackId,
+    trackName,
+  }) => {
+    try {
+      if (!blob) return;
+      if (!roomId) return;
+
+      const safeTrackName = String(trackName ?? `track_${trackId}`).trim() || `track_${trackId}`;
+
+      const formData = new FormData();
+      formData.append("audio", blob, `${safeTrackName}.webm`);
+      formData.append("roomName", roomId);
+      formData.append("roomSessionFolder", sessionFolder || roomId);
+      formData.append("username", username || "Anonymous");
+      formData.append("trackName", safeTrackName);
+
+      const res = await fetch(`${API_BASE}/api/recordings/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        console.error("Room track upload failed:", res.status);
+        return;
+      }
+    } catch (e) {
+      console.error("uploadRoomTrackBlob error:", e);
+    }
+  };
+
+  // ---------- Tapehead + live-growing clip animation while any recording is active ----------
   useEffect(() => {
     let frameId = null;
 
     const step = () => {
-      const recorder = mediaRecorderRef.current;
-
-      // Consider ANY active recorder (room OR armed-track recording)
+      // Any per-track recorder currently recording?
       const anyTrackRecorderRecording = (() => {
         const map = trackRecordersRef.current;
         if (!map || map.size === 0) return false;
@@ -169,10 +231,7 @@ export function useRecording({
         return false;
       })();
 
-      const isRecording =
-        (recorder && recorder.state === "recording") ||
-        anyTrackRecorderRecording ||
-        isGlobalRecording;
+      const isRecording = anyTrackRecorderRecording || isGlobalRecording || isRoomRecording;
 
       if (isRecording && recordStartTimeRef.current != null) {
         const now = performance.now();
@@ -185,22 +244,19 @@ export function useRecording({
           return;
         }
 
-        // Absolute head time = (absolute start time when record began) + elapsed
-        const headTimeAbs =
-          (recordInitialHeadTimeSecondsRef.current || 0) + elapsedSec;
+        // Absolute head time = (abs start time when record began) + elapsed
+        const headTimeAbs = (recordInitialHeadTimeSecondsRef.current || 0) + elapsedSec;
 
-        // This is what your canvases actually use to draw the yellow tapehead
         if (typeof setHeadTimeSeconds === "function") {
           setHeadTimeSeconds(headTimeAbs);
         }
 
-        // Use first track as the reference for viewport length (all tracks share the same viewStart)
+        // Use first track as viewport length reference (shared viewStart)
         const refTrack = tracksNow[0];
         const trackLength = getTrackLength(refTrack);
 
-        // Current viewport start
-        let viewStart =
-          typeof getViewStartTime === "function" ? getViewStartTime() || 0 : 0;
+        // IMPORTANT: use the snapshot viewStart from record start so we don't jump
+        let viewStart = lastViewStartDuringRecordRef.current;
 
         // Auto-scroll while recording: when head reaches right edge, move window forward by half
         if (
@@ -214,7 +270,7 @@ export function useRecording({
           viewStart = nextViewStart;
         }
 
-        // Update headPos for ALL tracks so the yellow head animates everywhere
+        // Update headPos for ALL tracks (yellow head animates everywhere)
         setTracks((prev) =>
           (prev || []).map((t) => {
             const len = getTrackLength(t);
@@ -224,10 +280,10 @@ export function useRecording({
             return { ...t, headPos };
           })
         );
+
+        // Live “growing” clip while recording (only for armed target tracks)
         const startTime = recordInitialHeadTimeSecondsRef.current || 0;
         const duration = Math.max(0, recordDurationRef.current || 0);
-
-        // Which tracks are being recorded (armed tracks from start)
         const targetIds = new Set(recordingTargetTrackIdsRef.current || []);
 
         if (targetIds.size > 0) {
@@ -235,22 +291,13 @@ export function useRecording({
             (prev || []).map((t) => {
               const tempId = tempRecClipIdFor(t.id);
 
-              // Remove temp clip from non-target tracks
               if (!targetIds.has(t.id)) {
                 const cleaned = (t.clips || []).filter((c) => c.id !== tempId);
                 return cleaned.length === (t.clips || []).length ? t : { ...t, clips: cleaned };
               }
 
-              // Add/update temp clip on target track
               const clips = Array.isArray(t.clips) ? t.clips : [];
-              const tempClip = {
-                id: tempId,
-                startTime,
-                duration,
-                url: null,
-                image: null,
-                isTemp: true,
-              };
+              const tempClip = { id: tempId, startTime, duration, url: null, image: null, isTemp: true };
 
               const idx = clips.findIndex((c) => c.id === tempId);
               if (idx >= 0) {
@@ -263,96 +310,59 @@ export function useRecording({
           );
         }
       }
-      // Live “growing” clip while recording
+
       frameId = window.requestAnimationFrame(step);
     };
 
     frameId = window.requestAnimationFrame(step);
 
     return () => {
-      if (frameId) {
-        window.cancelAnimationFrame(frameId);
-      }
+      if (frameId) window.cancelAnimationFrame(frameId);
     };
-  }, [
-  mediaRecorderRef,
-  tracksRef,
-  setTracks,
-  getViewStartTime,
-  setViewStartTime,
-  setHeadTimeSeconds,
-]);
+  }, [tracksRef, setTracks, setHeadTimeSeconds, setViewStartTime, isGlobalRecording, isRoomRecording]);
 
-  const ensureMediaRecorder = () => {
-    if (mediaRecorderRef.current) return;
-
-    const dest = recordDestRef.current;
-    if (!dest?.stream) return;
-
-    const recorder = new MediaRecorder(dest.stream);
-    mediaRecorderRef.current = recorder;
-
-    recorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) {
-        recordingChunksRef.current.push(e.data);
-      }
-    };
-
-    recorder.onstop = async () => {
-      // your existing onstop logic (upload + add clip to tracks)
-      // (do NOT put "..." here either)
-    };
-  };
-  // NEW: Global record toggle.
-  // - Start: records the master output
-  // - Stop: uploads + drops the recorded clip onto ALL tracks with isRecEnabled === true
-   const toggleGlobalRecord = async () => {
+  // ---------- Global record (armed tracks only) ----------
+  const toggleGlobalRecord = async () => {
     const ctx = getAudioContext();
     if (!ctx) return;
 
     // STOP
     if (isGlobalRecording) {
       const map = trackRecordersRef.current;
-
       for (const { recorder } of map.values()) {
         try {
           if (recorder?.state === "recording") recorder.stop();
-        } catch (e) {}
+        } catch {}
       }
 
       setIsGlobalRecording(false);
 
-      // IMPORTANT: do NOT remove the temp clip here.
-      // Let recorder.onstop replace the temp clip with the final clip.
-      // (So the growing clip never disappears.)
-
-      // Reset these AFTER stop has been requested (ok to clear targets;
-      // onstop uses t.id directly and tempRecClipIdFor(t.id))
+      // Stop live-growing clip updates
       recordingTargetTrackIdsRef.current = [];
       recordStartTimeRef.current = null;
 
       return;
     }
 
-
-
     // START: record ONLY armed tracks
     const tracksNow = tracksRef.current || [];
     const armedTracks = tracksNow.filter((t) => t.isRecEnabled === true);
     if (!armedTracks.length) return;
+
     recordingTargetTrackIdsRef.current = armedTracks.map((t) => t.id);
 
+    // Snapshot viewport + head time (prevents jump)
+    const viewStartNow = (typeof getViewStartTime === "function" ? getViewStartTime() : 0) || 0;
+    recordViewStartAtStartRef.current = viewStartNow;
+    lastViewStartDuringRecordRef.current = viewStartNow;
 
-    // Prepare tapehead animation baseline
     recordStartTimeRef.current = performance.now();
     recordDurationRef.current = 0;
-    recordInitialHeadTimeSecondsRef.current =
-      (typeof getHeadTimeSeconds === "function" ? getHeadTimeSeconds() : 0) || 0;
+    recordInitialHeadTimeSecondsRef.current = getCurrentHeadTimeSecondsSafe();
 
     // Clear previous recorders
     trackRecordersRef.current = new Map();
 
-    // Create one MediaRecorder per armed track, recording that track's bus stream
     for (const t of armedTracks) {
       const stream = audioEngine.getTrackRecordStream?.(t.id);
       if (!stream) continue;
@@ -360,7 +370,7 @@ export function useRecording({
       let recorder;
       try {
         recorder = new MediaRecorder(stream);
-      } catch (e) {
+      } catch {
         continue;
       }
 
@@ -372,21 +382,14 @@ export function useRecording({
       };
 
       recorder.onstop = async () => {
-        const blob = new Blob(entry.chunks, {
-          type: recorder.mimeType || "audio/webm",
-        });
+        const blob = new Blob(entry.chunks, { type: recorder.mimeType || "audio/webm" });
         entry.chunks = [];
-
-        // If the blob is tiny, it's basically garbage (prevents tiny empty clips)
-        if (!blob || blob.size < 1000) return;
+        if (!blob) return;
 
         const url = URL.createObjectURL(blob);
-
-        // Clamp duration so you never create a near-zero clip
         const duration = Math.max(0.05, recordDurationRef.current || 0);
         const startTime = recordInitialHeadTimeSecondsRef.current || 0;
 
-        // Replace the live temp clip with the final recorded clip
         setTracks((prev) =>
           (prev || []).map((trk) => {
             if (trk.id !== t.id) return trk;
@@ -408,34 +411,211 @@ export function useRecording({
         );
       };
 
-
       try {
         recorder.start();
-      } catch (e) {}
+      } catch {}
     }
 
     setIsGlobalRecording(true);
   };
 
-  const handleRoomRecordToggle = () => {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder) return;
+  // ---------- Room Record (armed tracks only, plus uploads into shared folder) ----------
+  const startRoomArmedTracks = (sessionFolder, username) => {
+    const ctx = getAudioContext();
+    if (!ctx) return;
 
-    if (recorder.state === "recording" && isRoomRecording) {
-      recorder.stop();
-      setIsRoomRecording(false);
-      return;
-    }
+    // Prevent conflicts with other recording modes
+    if (isGlobalRecording || isRoomRecording) return;
 
-    if (recorder.state === "recording" && !isRoomRecording) {
-      console.warn("Already recording a track; stop that first.");
-      return;
-    }
+    const tracksNow = tracksRef.current || [];
+    const armedTracks = tracksNow.filter((t) => t.isRecEnabled === true);
+    if (!armedTracks.length) return;
 
-    // Start a new "room" recording: no specific track target
+    const sf = (sessionFolder || roomId || "").trim();
+    if (!sf || !roomId) return;
+
+    // store for uploads
+    roomSessionFolderRef.current = sf;
+    roomUsernameRef.current = username || "Anonymous";
+
+    // Snapshot viewport + head time (prevents jump)
+    const viewStartNow = (typeof getViewStartTime === "function" ? getViewStartTime() : 0) || 0;
+    recordViewStartAtStartRef.current = viewStartNow;
+    lastViewStartDuringRecordRef.current = viewStartNow;
+
+    // baseline for growing clips + head animation
     recordStartTimeRef.current = performance.now();
-    recorder.start();
+    recordDurationRef.current = 0;
+    recordInitialHeadTimeSecondsRef.current = getCurrentHeadTimeSecondsSafe();
+
+    // Tell the animation loop which tracks get live growing clips
+    recordingTargetTrackIdsRef.current = armedTracks.map((t) => t.id);
+
+    // Clear previous recorders
+    trackRecordersRef.current = new Map();
+
+    for (const t of armedTracks) {
+      const stream = audioEngine.getTrackRecordStream?.(t.id);
+      if (!stream) continue;
+
+      let recorder;
+      try {
+        recorder = new MediaRecorder(stream);
+      } catch {
+        continue;
+      }
+
+      const entry = { recorder, chunks: [] };
+      trackRecordersRef.current.set(t.id, entry);
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) entry.chunks.push(e.data);
+      };
+
+      recorder.onstop = async () => {
+        const finishOneStop = () => {
+          if (!stoppingRoomRef.current) return;
+
+          pendingRoomStopsRef.current = Math.max(0, pendingRoomStopsRef.current - 1);
+
+          if (pendingRoomStopsRef.current === 0) {
+            stoppingRoomRef.current = false;
+            recordingTargetTrackIdsRef.current = [];
+            recordStartTimeRef.current = null;
+            setIsRoomRecording(false);
+
+            // Final refresh (delayed) so remote uploads land before we list recordings
+            setTimeout(() => {
+              fetchRecordings().catch(() => {});
+            }, 350);
+
+            if (typeof stopRoomResolveRef.current === "function") {
+              stopRoomResolveRef.current();
+              stopRoomResolveRef.current = null;
+            }
+          }
+        };
+
+        try {
+          const blob = new Blob(entry.chunks, {
+            type: recorder.mimeType || "audio/webm",
+          });
+          entry.chunks = [];
+
+          // If blob is empty/tiny, still count this track as "stopped" to avoid deadlock.
+          if (!blob) {
+            finishOneStop();
+            return;
+          }
+
+          // 1) Finalize local clip (replace temp)
+          const url = URL.createObjectURL(blob);
+          const duration = Math.max(0.05, recordDurationRef.current || 0);
+          const startTime = recordInitialHeadTimeSecondsRef.current || 0;
+
+          setTracks((prev) =>
+            (prev || []).map((trk) => {
+              if (trk.id !== t.id) return trk;
+
+              const tempId = tempRecClipIdFor(t.id);
+              const clips = Array.isArray(trk.clips) ? trk.clips : [];
+              const withoutTemp = clips.filter((c) => c.id !== tempId);
+
+              const newClip = {
+                id: Date.now() + Math.random(),
+                url,
+                duration,
+                startTime,
+                image: null,
+              };
+
+              return { ...trk, clips: [...withoutTemp, newClip] };
+            })
+          );
+
+          // 2) Upload to shared room folder
+          await uploadRoomTrackBlob({
+            blob,
+            sessionFolder: roomSessionFolderRef.current || roomId,
+            username: roomUsernameRef.current || "Anonymous",
+            trackId: t.id,
+            trackName: t.name,
+          });
+
+
+          // Count down regardless of upload success
+          finishOneStop();
+        } catch (e) {
+          console.error("Room recorder.onstop error:", e);
+          // Never deadlock stopping
+          finishOneStop();
+        }
+      };
+
+
+      try {
+        recorder.start();
+      } catch {}
+    }
+
     setIsRoomRecording(true);
+  };
+
+  const stopRoomArmedTracks = () => {
+    const map = trackRecordersRef.current;
+
+    // Stop anything that's actually recording, regardless of isRoomRecording state.
+    const entries = Array.from(map.values()).filter(
+      (x) => x?.recorder && x.recorder.state === "recording"
+    );
+
+    // If nothing is actively recording, finalize immediately (also clears temp clips)
+    if (entries.length === 0) {
+      stoppingRoomRef.current = false;
+      pendingRoomStopsRef.current = 0;
+      stopRoomResolveRef.current = null;
+
+      recordingTargetTrackIdsRef.current = [];
+      recordStartTimeRef.current = null;
+      setIsRoomRecording(false);
+      setTimeout(() => {
+          fetchRecordings().catch(() => {});
+        }, 350);
+        return Promise.resolve();
+      }
+    // Halt the tapehead/visuals immediately when "Stop Room Recording" is triggered,
+    // but still allow MediaRecorder.onstop handlers to finish uploads + clip finalization.
+    if (recordStartTimeRef.current != null) {
+      const now = performance.now();
+      recordDurationRef.current = (now - recordStartTimeRef.current) / 1000;
+    }
+    recordStartTimeRef.current = null;
+    setIsRoomRecording(false);
+
+    stoppingRoomRef.current = true;
+    pendingRoomStopsRef.current = entries.length;
+
+    // Return a promise so the UI can stay “finalizing” until all onstop handlers finish
+    const p = new Promise((resolve) => {
+      stopRoomResolveRef.current = resolve;
+    });
+
+    for (const { recorder } of entries) {
+      try {
+        recorder.stop();
+      } catch {}
+    }
+    return p;
+  };
+
+
+
+  const startGlobalRecord = async () => {
+    if (!isGlobalRecording) await toggleGlobalRecord();
+  };
+
+  const stopGlobalRecord = async () => {
+    if (isGlobalRecording) await toggleGlobalRecord();
   };
 
   return {
@@ -448,8 +628,13 @@ export function useRecording({
 
     isRoomRecording,
     isGlobalRecording,
-    toggleGlobalRecord,
-    handleRoomRecordToggle,
-  };
 
+    toggleGlobalRecord,
+    startGlobalRecord,
+    stopGlobalRecord,
+
+    // Room record = armed tracks + upload into shared ROOMNAME:# folder
+    startRoomArmedTracks,
+    stopRoomArmedTracks,
+  };
 }

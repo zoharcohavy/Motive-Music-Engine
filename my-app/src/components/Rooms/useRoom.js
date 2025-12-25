@@ -1,10 +1,11 @@
-// src/components/audio/useRoom.js
 import { useRef, useState, useEffect, useCallback } from "react";
 import { usePersistedState } from "../ui/usePersistedState";
+import { API_BASE } from "../audio/constants";
+
 
 const ROOM_STORAGE_KEY = "cohavyMusic.roomSession";
 
-export function useRoom({ onRemoteNote }) {
+export function useRoom({ onRemoteNote, onRoomRecordStart, onRoomRecordStop }) {
   const roomSocketRef = useRef(null);
   const hasAutoRejoinedRef = useRef(false);
 
@@ -26,6 +27,31 @@ export function useRoom({ onRemoteNote }) {
     Math.random().toString(36).slice(2) + Date.now().toString(36)
   );
   const [roomUsernames, setRoomUsernames] = useState([]);
+
+  
+  // Room-synced recording UI/state
+  const [roomCountdownSeconds, setRoomCountdownSeconds] = useState(null); // 5..1 or null
+  const [roomIsRecording, setRoomIsRecording] = useState(false);
+  
+
+
+  // UI phase for button smoothness:
+  // idle -> normal
+  // starting -> user clicked record (shows Stop immediately), waiting for countdown/start
+  // recording -> actively recording
+  const [roomRecordPhase, setRoomRecordPhase] = useState("idle");
+
+  // Convenience: while starting or recording, we consider UI "locked"
+  const isRoomLocked = roomRecordPhase !== "idle";
+
+  // Timers + guards so we don’t double-start/stop
+  const countdownTimersRef = useRef({ showTimer: null, tick: null });
+  const localRoomRecordingRef = useRef(false);
+  
+  // Authoritative record info from server (used for resync / reconnect)
+  const roomSessionFolderRef = useRef(null);
+  const roomRecordStartAtMsRef = useRef(null);
+
 
   const sendRoomMessage = useCallback(
     (msg) => {
@@ -51,14 +77,34 @@ export function useRoom({ onRemoteNote }) {
     (raw) => {
       let msg;
       try {
-        msg = JSON.parse(raw);
+        const text =
+          typeof raw === "string"
+            ? raw
+            : raw instanceof Blob
+            ? null
+            : raw instanceof ArrayBuffer
+            ? new TextDecoder().decode(raw)
+            : null;
+
+        if (text === null && raw instanceof Blob) {
+          // Blob parsing must be async, so we bail safely.
+          // (If you want, we can switch ws.binaryType to "arraybuffer" to avoid this.)
+          return;
+        }
+
+        msg = JSON.parse(text);
       } catch {
         console.warn("Room message is not valid JSON:", raw);
         return;
       }
 
-      // Ignore our own echoes
-      if (msg.userId && msg.userId === roomUserIdRef.current) return;
+
+      // Ignore our own echoes ONLY for note messages.
+      // For record_countdown / record_start / record_stop, we MUST process the server message
+      // even if it originated from us, so everyone's UI and transport stays in sync.
+      if (msg.type === "note" && msg.userId && msg.userId === roomUserIdRef.current) {
+        return;
+      }
 
       switch (msg.type) {
         case "note": {
@@ -80,13 +126,178 @@ export function useRoom({ onRemoteNote }) {
           }
           break;
         }
+        case "record_countdown": {
+          // msg: { type, countdownStartAtMs, recordStartAtMs, countFrom }
+          const countdownStartAtMs = Number(msg.countdownStartAtMs);
+          const recordStartAtMs = Number(msg.recordStartAtMs);
+          const countFrom = Number(msg.countFrom || 5);
+
+          if (!countdownStartAtMs || !recordStartAtMs) return;
+          roomRecordStartAtMsRef.current = recordStartAtMs;
+          // sessionFolder will be confirmed on record_start/status, but countdown can still prep timing
+
+
+          // Clear any existing countdown timers
+          const timers = countdownTimersRef.current;
+          if (timers.showTimer) clearTimeout(timers.showTimer);
+          if (timers.tick) clearInterval(timers.tick);
+          countdownTimersRef.current = { showTimer: null, tick: null };
+
+          setRoomCountdownSeconds(null);
+          setRoomRecordPhase("starting");
+
+
+          const now = Date.now();
+          const showDelay = Math.max(0, countdownStartAtMs - now);
+
+          // After ~2 seconds (server-controlled), begin showing 5..1
+          timers.showTimer = setTimeout(() => {
+            let s = countFrom;
+            setRoomCountdownSeconds(s);
+
+            timers.tick = setInterval(() => {
+              s -= 1;
+              if (s <= 0) {
+                clearInterval(timers.tick);
+                timers.tick = null;
+                setRoomCountdownSeconds(null);
+              } else {
+                setRoomCountdownSeconds(s);
+              }
+            }, 1000);
+          }, showDelay);
+
+          countdownTimersRef.current = timers;
+          break;
+        }
+
+        case "record_start": {
+          const sf = msg.sessionFolder || null;
+
+          roomSessionFolderRef.current = sf;
+          roomRecordStartAtMsRef.current = Date.now(); // server sets recordStartAtMs separately via record_status heartbeat
+
+          setRoomIsRecording(true);
+          setRoomRecordPhase("recording");
+
+          // Every client must start exactly once
+          if (!localRoomRecordingRef.current) {
+            localRoomRecordingRef.current = true;
+            onRoomRecordStart?.(sf);
+          }
+          break;
+        }
+
+
+        case "record_stop": {
+          setRoomIsRecording(false);
+          setRoomCountdownSeconds(null);
+
+          // Clear countdown timers
+          const timers = countdownTimersRef.current;
+          if (timers.showTimer) clearTimeout(timers.showTimer);
+          if (timers.tick) clearInterval(timers.tick);
+          countdownTimersRef.current = { showTimer: null, tick: null };
+
+          const sf = msg.sessionFolder || roomSessionFolderRef.current || null;
+
+          setRoomRecordPhase("finalizing");
+
+          // 🔑 FAILSAFE: never let any client get stuck in "finalizing"
+          const unlockTimer = setTimeout(() => {
+            roomSessionFolderRef.current = null;
+            roomRecordStartAtMsRef.current = null;
+            setRoomRecordPhase("idle");
+          }, 2500);
+
+          if (localRoomRecordingRef.current) {
+            localRoomRecordingRef.current = false;
+
+            // fire-and-forget
+            Promise.resolve(onRoomRecordStop?.(sf))
+              .catch((err) => {
+                console.warn("Room record stop error:", err);
+              })
+              .finally(() => {
+                clearTimeout(unlockTimer);
+                roomSessionFolderRef.current = null;
+                roomRecordStartAtMsRef.current = null;
+                setRoomRecordPhase("idle");
+              });
+          } else {
+            clearTimeout(unlockTimer);
+            roomSessionFolderRef.current = null;
+            roomRecordStartAtMsRef.current = null;
+            setRoomRecordPhase("idle");
+          }
+
+          break;
+        }
+
+
+
+
+
+        case "record_status": {
+          const isRec = !!msg.isRecording;
+          const sf = msg.sessionFolder || null;
+          const rs = typeof msg.recordStartAtMs === "number" ? msg.recordStartAtMs : null;
+
+          // Update UI flags
+          setRoomIsRecording(isRec);
+
+          // Cache authoritative server values
+          if (sf) roomSessionFolderRef.current = sf;
+          if (rs) roomRecordStartAtMsRef.current = rs;
+
+          // If server says recording is active, but we didn't start locally → start now
+          if (isRec) {
+            // Prevent accidental re-start while we're stopping
+            if (roomRecordPhase === "finalizing") return;
+
+            if (roomRecordPhase === "idle") setRoomRecordPhase("recording");
+
+            if (!localRoomRecordingRef.current) {
+              localRoomRecordingRef.current = true;
+              onRoomRecordStart?.(roomSessionFolderRef.current || null);
+            }
+            return;
+          }
+
+          // If server says NOT recording, always ensure UI is unlocked.
+          if (!isRec) {
+            if (localRoomRecordingRef.current) {
+              localRoomRecordingRef.current = false;
+
+              setRoomRecordPhase("finalizing");
+              Promise.resolve(onRoomRecordStop?.(roomSessionFolderRef.current || null))
+                .catch(() => {})
+                .finally(() => {
+                  roomSessionFolderRef.current = null;
+                  roomRecordStartAtMsRef.current = null;
+                  setRoomRecordPhase("idle");
+                });
+            } else {
+              // 🔑 Always unlock UI if server reports not recording
+              if (roomRecordPhase !== "idle") {
+                roomSessionFolderRef.current = null;
+                roomRecordStartAtMsRef.current = null;
+                setRoomRecordPhase("idle");
+              }
+            }
+          }
+
+          break;
+        }
+
+
 
         default:
           break;
       }
-    },
-    [onRemoteNote]
-  );
+    }, [onRemoteNote, onRoomRecordStart, onRoomRecordStop, roomRecordPhase]
+);
+
 
   const connectToRoom = useCallback(
     (roomCode, nameInput) => {
@@ -108,8 +319,22 @@ export function useRoom({ onRemoteNote }) {
       setRoomStatus("connecting");
       setRoomUsernames([]);
 
-      const wsUrl = `ws://localhost:8090/rooms?room=${encodeURIComponent(code)}`;
+      const proto = window.location.protocol === "https:" ? "wss" : "ws";
+
+      // Dev: React runs on :3000, backend websocket server runs on :8080.
+      // Change 8080 if your server uses a different port.
+      const backendPort = 8080;
+      const backendHost =
+        window.location.hostname === "localhost"
+          ? `${window.location.hostname}:${backendPort}`
+          : window.location.host;
+
+      const wsUrl = `${proto}://${backendHost}/rooms?room=${encodeURIComponent(code)}`;
+
+
       const ws = new WebSocket(wsUrl);
+      ws.binaryType = "arraybuffer";
+
 
       ws.onopen = () => {
         roomSocketRef.current = ws;
@@ -146,6 +371,19 @@ export function useRoom({ onRemoteNote }) {
     },
     [handleRoomMessage, setRoomSession]
   );
+  const toggleRoomRecord = useCallback(() => {
+    if (roomRecordPhase === "finalizing") return;
+    if (roomStatus !== "connected") return;
+
+    // UI immediate feedback (server still authoritative)
+    if (roomRecordPhase === "idle") setRoomRecordPhase("starting");
+
+    sendRoomMessage({ type: "room_record_toggle", username });
+  }, [sendRoomMessage, username, roomRecordPhase, roomStatus]);
+
+
+
+
 
   const disconnectRoom = useCallback(() => {
     if (roomSocketRef.current) {
@@ -172,6 +410,16 @@ export function useRoom({ onRemoteNote }) {
       connectToRoom(roomId, username);
     }
   }, [roomId, username, connectToRoom]);
+  useEffect(() => {
+    if (roomStatus !== "connected") return;
+
+    const id = setInterval(() => {
+      // ping triggers server to respond with occupancy + record_status
+      sendRoomMessage({ type: "ping", username });
+    }, 2000);
+
+    return () => clearInterval(id);
+  }, [roomStatus, sendRoomMessage, username]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -191,6 +439,11 @@ export function useRoom({ onRemoteNote }) {
     roomStatus,
     roomUsernames,
     isRoomModalOpen,
+    toggleRoomRecord,
+    roomCountdownSeconds,
+    roomIsRecording,
+    roomRecordPhase,
+    isRoomLocked,
     openRoomModal,
     closeRoomModal,
     connectToRoom,

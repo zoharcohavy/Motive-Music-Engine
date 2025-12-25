@@ -19,6 +19,19 @@ export function useInstrumentPageLogic() {
   // We need a ref so the room callback can call audioEngine.playRemoteNote
   const audioEngineRef = useRef(null);
 
+  // Always-available “bridge” so audioEngine can send WS messages even though room is created first
+  const sendRoomMessageRef = useRef(null);
+
+  // Keep room status reactive for useAudioEngine (a ref won’t trigger updates)
+  const [roomStatusForEngine, setRoomStatusForEngine] = useState("disconnected");
+
+  // Make room recording callbacks safe (avoid “recording is undefined” race)
+  const recordingRef = useRef(null);
+
+  // Username can be stale inside callbacks; keep a ref
+  const usernameRef = useRef("Anonymous");
+
+
   // --- Room / WebSocket ---
   // Room notifies us when a remote user plays a note.
   const room = useRoom({
@@ -26,25 +39,39 @@ export function useInstrumentPageLogic() {
       const engine = audioEngineRef.current;
       if (!engine) return;
 
-      // Play the remote note through our local audio engine
-      engine.playRemoteNote(freq, {
-        waveform,
-        effects: effects ?? effect,
-      });
+      engine.playRemoteNote(freq, { waveform, effects: effects ?? effect });
+    },
 
-      // Optionally sync local effect with the room’s effect
-      if ((effects || effect) && typeof engine.setEffectFromRoom === "function") {
-        engine.setEffectFromRoom(effects ?? effect);
-      }
+    onRoomRecordStart: (sessionFolder) => {
+      // SAFE: recording might not exist yet at the moment WS message arrives
+      recordingRef.current?.startRoomArmedTracks(sessionFolder, usernameRef.current);
+    },
+
+    onRoomRecordStop: (sessionFolder) => {
+      // SAFE + returns promise so UI stays “finalizing” until finished
+      return recordingRef.current?.stopRoomArmedTracks(sessionFolder);
     },
   });
+  useEffect(() => {
+    // Bridge for engine broadcasting notes
+    sendRoomMessageRef.current = room.sendRoomMessage;
+
+    // Keep engine updated when room connects/disconnects
+    setRoomStatusForEngine(room.roomStatus);
+
+    // Keep username stable inside room-record callbacks
+    usernameRef.current = room.username || "Anonymous";
+  }, [room.sendRoomMessage, room.roomStatus, room.username]);
+
 
   // --- Audio engine ---
   // Give the audio engine awareness of the room so it can broadcast notes.
   const audioEngine = useAudioEngine({
-    roomStatus: room.roomStatus,
-    sendRoomMessage: room.sendRoomMessage,
+    roomStatus: roomStatusForEngine,
+    sendRoomMessage: (msg) => sendRoomMessageRef.current?.(msg),
   });
+
+
 
   // Make the engine accessible to the room callback
   audioEngineRef.current = audioEngine;
@@ -92,6 +119,7 @@ export function useInstrumentPageLogic() {
   //   })
   const recording = useRecording({
     audioEngine,
+    roomId: room.roomId, 
     trackCanvasRefs: trackModel.trackCanvasRefs,
     tracksRef: trackModel.tracksRef,
     setTracks: trackModel.setTracks,
@@ -103,6 +131,8 @@ export function useInstrumentPageLogic() {
     setViewStartTime: trackModel.setViewStartTime,
     getTrackLength: trackModel.getTrackLength,
   });
+  recordingRef.current = recording;
+
   
   // --- Keyboard handlers for the PianoKeyboard component ---
   const handleKeyMouseDown = (key) => {
@@ -349,15 +379,17 @@ export function useInstrumentPageLogic() {
     // ===== Recording controls + recordings list =====
     isGlobalRecording: recording.isGlobalRecording,
     toggleGlobalRecord: recording.toggleGlobalRecord,
+    handleRoomRecordToggle: room.toggleRoomRecord,
+    roomRecordPhase: room.roomRecordPhase,
+    isRoomLocked: room.isRoomLocked,
     recordings: recording.recordings,
     recordingsError: recording.recordingsError,
     storageFiles: recording.storageFiles,
     storageError: recording.storageError,
     handleTrackUpload,
-
-    handleTrackRecordToggle: recording.handleTrackRecordToggle,
-    handleRoomRecordToggle: recording.handleRoomRecordToggle,
-    isRoomRecording: recording.isRoomRecording,
+    
+    isRoomRecording: room.roomIsRecording,
+    roomCountdownSeconds: room.roomCountdownSeconds,
 
     // ===== Room / networking =====
     roomId: room.roomId,

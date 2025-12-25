@@ -19,6 +19,7 @@ export function useTrackModel(options = {}) {
   const [tracks, setTracks] = useState([
     {
       id: 0,
+      name: "0",
       zoom: 1, //fix later
       headPos: 0, // 0..1 across the strip
       clips: [], // [{ id, url, duration, startTime, image }]
