@@ -502,3 +502,6 @@ select:focus, button:focus, input:focus {
   font-size: 0.82rem;
   opacity: 0.75;
 }
+.roomLocked { pointer-events: none; user-select: none; }
+.roomLocked .roomAllowedInstrument { pointer-events: auto; }
+.roomLocked .roomAllowedStop { pointer-events: auto; }

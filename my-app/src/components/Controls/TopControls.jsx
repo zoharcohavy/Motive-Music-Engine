@@ -9,6 +9,8 @@ export default function TopControls({
   handleRoomRecordToggle,
   isRoomRecording,
   roomUsernames,
+  roomCountdownSeconds,
+  roomRecordPhase = "idle",
 }) {
   const usersLabel =
     Array.isArray(roomUsernames) && roomUsernames.length > 0
@@ -32,16 +34,24 @@ export default function TopControls({
           </button>
 
           {roomStatus === "connected" && (
-            <button
-              type="button"
-              onClick={handleRoomRecordToggle}
-              className={`topControls__roomRecBtn ${
-                isRoomRecording ? "topControls__roomRecBtn--active" : ""
-              }`}
-            >
-              {isRoomRecording ? "⏹ Stop Room Record" : "⏺ Record Room"}
-            </button>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+              <button
+                type="button"
+                onClick={handleRoomRecordToggle}
+                className={`topControls__roomRecBtn roomAllowedStop ${
+                  roomRecordPhase !== "idle" ? "topControls__roomRecBtn--active" : ""
+                }`}
+              >
+                {roomRecordPhase !== "idle" ? "⏹ Stop Room Record" : "⏺ Record Room"}
+              </button>
+
+              {typeof roomCountdownSeconds === "number" && (
+                <span style={{ fontWeight: 800 }}>{roomCountdownSeconds}</span>
+              )}
+            </div>
           )}
+
+
         </div>
 
         {/* Center: room + usernames */}

@@ -12,6 +12,23 @@ export default function RecordingsPanel({
   const [isRecFolderOpen, setIsRecFolderOpen] = useState(true);
   const [isStorageFolderOpen, setIsStorageFolderOpen] = useState(true);
 
+  const groupedRecordings = (recordings || []).reduce((acc, p) => {
+    const parts = String(p).split("/");
+
+    if (parts.length >= 2) {
+      const folder = parts[0];
+      const rest = parts.slice(1).join("/");
+      if (!acc[folder]) acc[folder] = [];
+      acc[folder].push({ full: p, name: rest });
+    } else {
+      // Only create Ungrouped if truly needed
+      if (!acc.__ungrouped) acc.__ungrouped = [];
+      acc.__ungrouped.push({ full: p, name: p });
+    }
+
+    return acc;
+  }, {});
+
   return (
     <div className={`recPanel ${isOpen ? "" : "recPanel--collapsed"}`}>
       <button
@@ -49,19 +66,32 @@ export default function RecordingsPanel({
                 <div className="recPanel__empty">No recordings yet</div>
               ) : (
                 <ul className="recPanel__list">
-                  {recordings.map((file) => (
-                    <li key={file} className="recPanel__item">
-                      <a
-                        href={`${API_BASE}/recordings/${file}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="recPanel__link"
-                      >
-                        {file}
-                      </a>
-                    </li>
-                  ))}
+                  {Object.entries(groupedRecordings).map(([folder, items]) => {
+                    const label = folder === "__ungrouped" ? "Ungrouped" : folder;
+
+                    return (
+                      <li key={folder} className="recPanel__item" style={{ marginBottom: 10 }}>
+                        <div style={{ fontWeight: 700, marginBottom: 6 }}>{label}</div>
+                        <ul className="recPanel__list">
+                          {items.map((it) => (
+                            <li key={it.full} className="recPanel__item">
+                              <a
+                                href={`${API_BASE}/recordings/${it.full}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="recPanel__link"
+                              >
+                                {it.name}
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      </li>
+                    );
+                  })}
+
                 </ul>
+
               )
             ) : null}
           </div>

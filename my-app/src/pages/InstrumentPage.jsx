@@ -78,6 +78,10 @@ export default function InstrumentPage({ instrument }) {
     roomId,
     username,
     roomStatus,
+    isRoomLocked,
+    roomCountdownSeconds,
+    roomRecordPhase,
+
     isRoomModalOpen,
     openRoomModal,
     closeRoomModal,
@@ -274,34 +278,39 @@ export default function InstrumentPage({ instrument }) {
   };
 
   return (
-    <div className={`tone-test-page app-shell instrumentLayout ${isDrums ? "hasDrumDock" : ""}`}>
-      {/* Left instrument menu */}
-      <aside className="card instrumentMenu">
-        <div className="instrumentMenu__title">Instrument</div>
-        <div className="instrumentMenu__grid">
-          {instrumentChoices.map((c) => {
-            const isActive = location.pathname === c.path;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                className={`instrumentMenu__btn ${isActive ? "isActive" : ""}`}
-                onClick={() => navigate(c.path)}
-                title={c.label}
-              >
-                {c.img ? (
-                  <img className="instrumentMenu__img" src={c.img} alt={c.label} />
-                ) : null}
-                <div className="instrumentMenu__label">{c.label}</div>
-              </button>
-            );
-          })}
-        </div>
+    <div
+      className={`tone-test-page app-shell instrumentLayout ${
+        isDrums ? "hasDrumDock" : ""
+      } ${isRoomLocked ? "roomLocked" : ""}`}
+    >
+        {/* Left instrument menu */}
+        <aside className="card instrumentMenu">
+          <div className="instrumentMenu__title">Instrument</div>
+          <div className="instrumentMenu__grid">
+            {instrumentChoices.map((c) => {
+              const isActive = location.pathname === c.path;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={`instrumentMenu__btn ${isActive ? "isActive" : ""}`}
+                  onClick={() => navigate(c.path)}
+                  title={c.label}
+                >
+                  {c.img ? (
+                    <img className="instrumentMenu__img" src={c.img} alt={c.label} />
+                  ) : null}
+                  <div className="instrumentMenu__label">{c.label}</div>
+                </button>
+              );
+            })}
+          </div>
 
-        <div className="instrumentMenu__hint">
-          Tip: swap these images later (see the imports at the top of this file).
-        </div>
-      </aside>
+          <div className="instrumentMenu__hint">
+            Tip: swap these images later (see the imports at the top of this file).
+          </div>
+        </aside>
+      
       <main className="instrumentMain">
       {/* Recordings list in upper-right */}
       <RecordingsPanel
@@ -326,6 +335,8 @@ export default function InstrumentPage({ instrument }) {
         handleRoomRecordToggle={handleRoomRecordToggle}
         isRoomRecording={isRoomRecording}
         roomUsernames={roomUsernames}
+        roomCountdownSeconds={roomCountdownSeconds}
+        roomRecordPhase={roomRecordPhase}
       />
 
             {/* Live waveform (collapsible) */}
@@ -388,45 +399,47 @@ export default function InstrumentPage({ instrument }) {
       />
 
       {/* Soundboard */}
-      {isDrums ? (
-        <>
-          <DrumMachine
-            layout="kit"
-            drumImageScale={drumImageScale}
-            drumKeyOpacity={drumKeyOpacity}
-            drumAnchors={drumAnchors}
-            setDrumAnchors={setDrumAnchors}
-            pads={drumConfig.pads}
+      <div className="roomAllowedInstrument">
+        {isDrums ? (
+          <>
+            <DrumMachine
+              layout="kit"
+              drumImageScale={drumImageScale}
+              drumKeyOpacity={drumKeyOpacity}
+              drumAnchors={drumAnchors}
+              setDrumAnchors={setDrumAnchors}
+              pads={drumConfig.pads}
+              activeKeyIds={activeKeyIds}
+              onMouseDownKey={handleKeyMouseDown}
+              onMouseEnterKey={handleKeyMouseEnter}
+              getCharForPadId={drumConfig.getCharForPadId}
+              showCustomize={showDrumCustomize}
+              onToggleCustomize={() => setShowDrumCustomize((v) => !v)}
+            />
+          </>
+        ) : isSampler ? (
+          <>
+            <DrumMachine
+              layout="grid"
+              drumImageScale={samplerImageScale}
+              drumKeyOpacity={samplerKeyOpacity}
+              pads={drumConfig.pads}
+              activeKeyIds={activeKeyIds}
+              onMouseDownKey={handleKeyMouseDown}
+              onMouseEnterKey={handleKeyMouseEnter}
+              getCharForPadId={drumConfig.getCharForPadId}
+              showCustomize={showDrumCustomize}
+              onToggleCustomize={() => setShowDrumCustomize((v) => !v)}
+            />
+          </>
+        ) : (
+          <PianoKeyboard
             activeKeyIds={activeKeyIds}
             onMouseDownKey={handleKeyMouseDown}
             onMouseEnterKey={handleKeyMouseEnter}
-            getCharForPadId={drumConfig.getCharForPadId}
-            showCustomize={showDrumCustomize}
-            onToggleCustomize={() => setShowDrumCustomize((v) => !v)}
           />
-        </>
-      ) : isSampler ? (
-        <>
-          <DrumMachine
-            layout="grid"
-            drumImageScale={samplerImageScale}
-            drumKeyOpacity={samplerKeyOpacity}
-            pads={drumConfig.pads}
-            activeKeyIds={activeKeyIds}
-            onMouseDownKey={handleKeyMouseDown}
-            onMouseEnterKey={handleKeyMouseEnter}
-            getCharForPadId={drumConfig.getCharForPadId}
-            showCustomize={showDrumCustomize}
-            onToggleCustomize={() => setShowDrumCustomize((v) => !v)}
-          />
-        </>
-      ) : (
-        <PianoKeyboard
-          activeKeyIds={activeKeyIds}
-          onMouseDownKey={handleKeyMouseDown}
-          onMouseEnterKey={handleKeyMouseEnter}
-        />
-      )}
+        )}
+      </div>
 
       {(isDrums || isSampler) && (
         <DrumPadCustomizer
