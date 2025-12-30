@@ -5,20 +5,24 @@
 .topControls__col {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0;
+  margin: 0;
+  padding: 0;
 }
 
 .topControls__row {
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
 }
+
 
 /* left side wrapper (was inline flex:1 + flex + gap) */
 .topControls__left {
   flex: 1;
   display: flex;
-  gap: 0.5rem;
+  gap: 4rem;
 }
 
 /* Room connect/leave button (base) */
@@ -29,7 +33,7 @@
   background: rgba(0, 0, 0, 0.25);
   color: rgba(232, 244, 242, 0.95);
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 1.2rem;
 }
 
 .topControls__roomBtn--connected {
@@ -44,7 +48,7 @@
   background: rgba(240, 75, 90, 0.12);
   color: rgba(232, 244, 242, 0.95);
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 1.2rem;
 }
 
 .topControls__roomRecBtn--active {
@@ -55,12 +59,14 @@
 .topControls__center {
   flex: 1;
   text-align: center;
-  font-size: 0.85rem;
+  font-size: 1.2rem;
   opacity: 0.85;
-}
 
-.topControls__notInRoom {
-  opacity: 0.7;
+  /* Reserve space so connecting to a room doesn't push Tracks down */
+  min-height: 54px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
 }
 
 .topControls__spacer {
@@ -71,14 +77,14 @@
 .topControls__rowWrap {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 4rem;
   flex-wrap: wrap;
 }
 
 .topControls__group {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 4rem;
 }
 
 .mouseModeCard {
@@ -99,7 +105,7 @@
 /* 2x2 grid */
 .mouseModeGrid {
   display: grid;
-  grid-template-columns: repeat(2, 44px);
+  grid-template-columns: repeat(3, 44px);
   grid-template-rows: repeat(2, 44px);
   gap: 6px;
 }
@@ -129,7 +135,7 @@
 }
 
 .mouseModeBtn:hover {
-  border-color: rgba(120, 170, 255, 0.65);
+  border-color: rgba(248, 249, 251, 0.65);
   box-shadow: 0 0 0 2px rgba(120, 170, 255, 0.18);
 }
 
@@ -157,4 +163,176 @@
   filter: brightness(0) invert(1);
 }
 
+.topControls__rooms {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 400px;
+  /* keep room buttons/info compact */
+  gap: 6px;
+  min-height: 54px;
+}
+
+
+.topControls__centerButtons {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 0;
+}
+
+
+.topControls__centerInfo {
+  font-size: 1.2rem;
+  opacity: 0.85;
+  text-align: center;
+}
+
+.topControls__countdown {
+  font-weight: 800;
+}
+/* Smart mouse composite icon layout */
+.mouseModeBtn--smart {
+  padding: 0; /* we control inner layout exactly */
+}
+
+.smartMouseIcon {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.smartMouseTop {
+  height: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.smartMouseDivider {
+  height: 1px;
+  width: 100%;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.smartMouseBottom {
+  height: calc(50% - 1px);
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+}
+
+.smartMouseVDivider {
+  width: 1px;
+  height: 60%;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+/* Override icon sizing just for smart button */
+.mouseModeBtn--smart .smartMouseTop img {
+  width: 18px;
+  height: 18px;
+}
+
+.mouseModeBtn--smart .smartMouseBottom img {
+  width: 12px;
+  height: 12px;
+}
+
+/* Make dividers readable on active (green) state */
+.mouseModeBtn.active .smartMouseDivider,
+.mouseModeBtn.active .smartMouseVDivider {
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.liveWaveCard {
+  margin-top: 6px;
+}
+
+.mouseModeRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  position: static;
+  top: auto;
+  z-index: auto;
+  margin: 0;
+  padding: 0;
+}
+
+/* Dock that keeps the mouse-mode grid + ribbon fixed, and lets the monitor appear to the right
+   without moving any buttons. */
+.mouseModeDock {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: fit-content;
+}
+
+/* Ribbon attached to bottom-right of mouse mode grid */
+.liveWaveRibbon {
+  position: absolute;
+
+  /* bottom-right of the mouse-mode card */
+  right: 10px;
+  top: calc(100% - 1px); /* slight overlap so it feels attached */
+
+  height: 16px; /* shorter */
+  width: 72px;  /* a bit wider */
+  padding: 0 8px;
+
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+  background: rgba(255, 255, 255, 0.6);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+
+  cursor: pointer;
+  z-index: 2;
+}
+
+.liveWaveRibbon.active {
+  background: #15c46f;
+}
+
+.liveWaveRibbon__icon {
+  width: 14px;
+  height: 14px;
+  filter: brightness(0) saturate(100%);
+}
+
+.liveWaveRibbon__text {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: rgba(0, 0, 0, 0.75);
+}
+
+.liveWaveRibbon.active .liveWaveRibbon__icon {
+  filter: brightness(0) invert(1);
+}
+
+.liveWaveRibbon.active .liveWaveRibbon__text {
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Live waveform monitor docks to the right (overlay) so opening it doesn't shift layout */
+.liveWaveCard.liveWaveCard--docked {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 10px);
+  margin-top: 0;
+
+  /* DOUBLE WIDTH (takes most of the strip) */
+  width: 640px;
+  max-width: 72vw;
+}
 

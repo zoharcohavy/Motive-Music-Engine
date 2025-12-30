@@ -5,7 +5,13 @@ import { API_BASE } from "../audio/constants";
 
 const ROOM_STORAGE_KEY = "cohavyMusic.roomSession";
 
-export function useRoom({ onRemoteNote, onRoomRecordStart, onRoomRecordStop }) {
+export function useRoom({
+  onRemoteNote,
+  onRoomRecordStart,
+  onRoomRecordStop,
+  onPrecheckRequest,
+  onPrecheckResponse,
+}) {
   const roomSocketRef = useRef(null);
   const hasAutoRejoinedRef = useRef(false);
 
@@ -126,6 +132,19 @@ export function useRoom({ onRemoteNote, onRoomRecordStart, onRoomRecordStop }) {
           }
           break;
         }
+        case "precheck_request": {
+          if (typeof msg.requestId === "string") {
+            onPrecheckRequest?.(msg);
+          }
+          break;
+        }
+        case "precheck_response": {
+          if (typeof msg.requestId === "string") {
+            onPrecheckResponse?.(msg);
+          }
+          break;
+        }
+
         case "record_countdown": {
           // msg: { type, countdownStartAtMs, recordStartAtMs, countFrom }
           const countdownStartAtMs = Number(msg.countdownStartAtMs);
@@ -295,8 +314,15 @@ export function useRoom({ onRemoteNote, onRoomRecordStart, onRoomRecordStop }) {
         default:
           break;
       }
-    }, [onRemoteNote, onRoomRecordStart, onRoomRecordStop, roomRecordPhase]
-);
+    }, [
+      onRemoteNote,
+      onRoomRecordStart,
+      onRoomRecordStop,
+      onPrecheckRequest,
+      onPrecheckResponse,
+      roomRecordPhase,
+    ]);
+
 
 
   const connectToRoom = useCallback(
@@ -381,19 +407,30 @@ export function useRoom({ onRemoteNote, onRoomRecordStart, onRoomRecordStop }) {
     sendRoomMessage({ type: "room_record_toggle", username });
   }, [sendRoomMessage, username, roomRecordPhase, roomStatus]);
 
-
-
-
-
   const disconnectRoom = useCallback(() => {
+    // stop any countdown timers
+    const t = countdownTimersRef.current;
+    if (t?.showTimer) clearTimeout(t.showTimer);
+    if (t?.tick) clearInterval(t.tick);
+    countdownTimersRef.current = { showTimer: null, tick: null };
+
+    // reset local recording UI state so the app doesn't stay "locked"
+    localRoomRecordingRef.current = false;
+    setRoomCountdownSeconds(null);
+    setRoomIsRecording(false);
+    setRoomRecordPhase("idle");
+
+    // close socket
     if (roomSocketRef.current) {
       try {
         roomSocketRef.current.close();
       } catch {}
       roomSocketRef.current = null;
     }
+
     setRoomStatus("disconnected");
     setRoomUsernames([]);
+
     // Explicit leave => clear persistence
     setRoomSession({ roomId: null, username: null });
   }, [setRoomSession]);

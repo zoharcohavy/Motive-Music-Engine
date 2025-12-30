@@ -70,7 +70,7 @@ code {
 
 /* Notice (collapsible advanced controls) */
 .notice {
-  margin-top: 12px;
+  margin-top: 0px;
 }
 
 .notice__header {
@@ -101,14 +101,14 @@ code {
 
 .notice__subtitle {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 1.2rem;
 }
 
 .notice__spacer { flex: 1; }
 
 .notice__hint {
   color: rgba(232, 244, 242, 0.6);
-  font-size: 0.78rem;
+  font-size: 1.2rem;
 }
 
 .notice__body { margin-top: 10px; }
@@ -120,7 +120,7 @@ code {
   /* More minimal than the default notice styling */
   border-color: rgba(163, 255, 232, 0.18);
   background: rgba(0, 0, 0, 0.18);
-  font-size: 0.82rem;
+  font-size: 1.2rem;
   padding: 5px 8px;
 }
 
@@ -148,7 +148,7 @@ select:focus, button:focus, input:focus {
 }
 
 .select--compact {
-  font-size: 0.85rem;
+  font-size: 1.2rem;
   padding: 0.15rem 0.35rem !important;
   border-radius: 8px;
 }
@@ -299,7 +299,7 @@ select:focus, button:focus, input:focus {
 
 .fxModal__desc {
   margin: 0 0 0.9rem 0;
-  font-size: 0.85rem;
+  font-size: 4rem;
   opacity: 0.85;
 }
 
@@ -308,7 +308,7 @@ select:focus, button:focus, input:focus {
 .fxModal__row {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 4rem;
   padding: 0.45rem 0.55rem;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -318,7 +318,7 @@ select:focus, button:focus, input:focus {
 .fxModal__actions {
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: 4rem;
   margin-top: 0.9rem;
 }
 
@@ -505,3 +505,35 @@ select:focus, button:focus, input:focus {
 .roomLocked { pointer-events: none; user-select: none; }
 .roomLocked .roomAllowedInstrument { pointer-events: auto; }
 .roomLocked .roomAllowedStop { pointer-events: auto; }
+
+.appModal__small {
+  font-size: 0.95rem;
+  line-height: 1.35;
+  opacity: 0.9;
+}
+
+.appModal__checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 0.9rem;
+  user-select: none;
+}
+
+.appModal__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.appModal__btn {
+  border: 1px solid rgba(0,0,0,0.25);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.75);
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.appModal__btn--danger {
+  background: rgba(255, 80, 80, 0.15);
+}

@@ -122,18 +122,6 @@ export default function DrumKeyboard({
     <div className="drum-keypad-container">
       <div className="drum-keypad-header">
         <div className="drum-keypad-title"></div>
-
-        {onToggleCustomize ? (
-          <button
-            className="drumCustomizeBtn"
-            onClick={onToggleCustomize}
-            title="Customize drum pads"
-            aria-label="Customize drum pads"
-          >
-            <img src={ToolsIcon} alt="" draggable={false} />
-          </button>
-
-        ) : null}
       </div>
 
       {/* This wrapper MUST be position: relative in CSS */}
@@ -144,6 +132,17 @@ export default function DrumKeyboard({
             style={{ transform: `scale(${Number(drumImageScale) || 1.25})` }}
           >
             <img className="drumKb__img" src={DrumImage} alt="Drum kit" />
+              {onToggleCustomize ? (
+                <button
+                  className="drumCustomizeBtn drumCustomizeBtn--overlay"
+                  onClick={onToggleCustomize}
+                  title="Customize drum pads"
+                  aria-label="Customize drum pads"
+                  type="button"
+                >
+                  <img src={ToolsIcon} alt="" draggable={false} />
+                </button>
+              ) : null}
 
             <div
               ref={overlayRef}

@@ -196,11 +196,16 @@ export function useRecording({
       const safeTrackName = String(trackName ?? `track_${trackId}`).trim() || `track_${trackId}`;
 
       const formData = new FormData();
-      formData.append("audio", blob, `${safeTrackName}.webm`);
+
+      // IMPORTANT: append text fields FIRST so multer destination() can read req.body.*
       formData.append("roomName", roomId);
       formData.append("roomSessionFolder", sessionFolder || roomId);
       formData.append("username", username || "Anonymous");
       formData.append("trackName", safeTrackName);
+
+      // Append the file LAST
+      formData.append("audio", blob, `${safeTrackName}.webm`);
+
 
       const res = await fetch(`${API_BASE}/api/recordings/upload`, {
         method: "POST",

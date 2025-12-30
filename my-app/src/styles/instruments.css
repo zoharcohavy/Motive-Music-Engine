@@ -68,7 +68,7 @@
   left: 0;
   right: 0;
   bottom: 0;
-  height: 90px;
+  height: clamp(120px, 16vh, 180px);
   overflow-x: hidden;
   background: #ddd;
 }
@@ -557,4 +557,30 @@
 .drumCustomOverlay {
   background: rgba(0, 0, 0, 0.85) !important;
   backdrop-filter: blur(2px);
+}
+
+.drumCustomizeBtn--overlay {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 20;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+
+/* Piano waveform selector overlay */
+
+.pianoKb__waveformCtl {
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  z-index: 5;
+}
+.pianoKb__waveformSelect {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(10, 15, 18, 0.55);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: inherit;
+  backdrop-filter: blur(8px);
 }

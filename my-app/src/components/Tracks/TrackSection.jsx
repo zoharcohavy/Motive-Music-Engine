@@ -1,4 +1,6 @@
 import { useRef, useState } from "react";
+import AppModal from "../ui/AppModal";
+
 
 const BASE_STRIP_SECONDS = 10;
 const MIN_TIMELINE_SECONDS = 120; // 2 minutes: makes Scroll usable on page load
@@ -79,6 +81,9 @@ export default function TrackSection({
 }) {
   const [editingTrackId, setEditingTrackId] = useState(null);
   const [nameDraft, setNameDraft] = useState("");
+
+  const [confirmDeleteTrackId, setConfirmDeleteTrackId] = useState(null);
+  const [confirmDeleteClipCount, setConfirmDeleteClipCount] = useState(0);
 
   const controlsResizeRef = useRef(null);
   const trackResizeRef = useRef(null);
@@ -385,7 +390,16 @@ export default function TrackSection({
               <button
                 type="button"
                 className="btn trackSection__fxBtn"
-                onClick={() => onOpenFx?.(track.id)}
+                onClick={() => {
+                  const clipCount = (track.clips || []).length;
+                  if (clipCount > 0) {
+                    setConfirmDeleteTrackId(track.id);
+                    setConfirmDeleteClipCount(clipCount);
+                    return;
+                  }
+                  deleteTrack(track.id);
+                }}
+
                 title="Track effects"
               >
                 +FX
@@ -473,6 +487,37 @@ export default function TrackSection({
       })}
 
       </div>
+      <AppModal
+        isOpen={confirmDeleteTrackId != null}
+        title="Delete track?"
+        onClose={() => setConfirmDeleteTrackId(null)}
+        onEnter={() => {
+          if (confirmDeleteTrackId != null) deleteTrack?.(confirmDeleteTrackId);
+          setConfirmDeleteTrackId(null);
+        }}
+      >
+        <p className="appModal__small">
+          You have {confirmDeleteClipCount} clip{confirmDeleteClipCount === 1 ? "" : "s"} here.
+          Are you sure you want to delete them?
+        </p>
+
+        <div className="appModal__footer" style={{ padding: 0, marginTop: "0.9rem" }}>
+          <button type="button" className="appModal__btn" onClick={() => setConfirmDeleteTrackId(null)}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="appModal__btn appModal__btn--danger"
+            onClick={() => {
+              if (confirmDeleteTrackId != null) deleteTrack?.(confirmDeleteTrackId);
+              setConfirmDeleteTrackId(null);
+            }}
+          >
+            Delete track
+          </button>
+        </div>
+      </AppModal>
+
     </div>
   );
 }

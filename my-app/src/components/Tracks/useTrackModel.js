@@ -50,7 +50,7 @@ export function useTrackModel(options = {}) {
   const [headTimeSeconds, setHeadTimeSeconds] = useState(0); // absolute playhead time in seconds
   const [activeRecordingTrackId, setActiveRecordingTrackId] = useState(null);
   const [selectedTrackId, setSelectedTrackId] = useState(0);
-  const [mouseMode, setMouseMode] = useState("head"); // head | clips | delete | cut 
+  const [mouseMode, setMouseMode] = useState("smart"); // smart | head | move | delete | cut | crop
   const [activeKeyIds, setActiveKeyIds] = useState([]);
 
   // ---------- Refs ----------
@@ -79,6 +79,11 @@ export function useTrackModel(options = {}) {
 
 
   // ---------- Helpers ----------
+
+  const setStripCursor = (evt, cursor) => {
+    const el = evt?.currentTarget;
+    if (el && el.style) el.style.cursor = cursor;
+  };
 
   const getTrackLength = (track) => {
     const zoom = track.zoom || 1;
@@ -234,8 +239,29 @@ export function useTrackModel(options = {}) {
 
     const clips = track.clips || [];
 
+    const secondsPerPixel = visibleSeconds / Math.max(1, rect.width);
+    const EDGE_SECONDS = Math.max(0.05, secondsPerPixel * 10); // ~10px grab zone
+
+    const getSmartTargetMode = () => {
+      // 1) near edge => crop
+      for (const c of clips) {
+        const start = c.startTime;
+        const end = c.startTime + c.duration;
+        if (clickTime >= start - EDGE_SECONDS && clickTime <= end + EDGE_SECONDS) {
+          const nearLeft = Math.abs(clickTime - start) <= EDGE_SECONDS;
+          const nearRight = Math.abs(clickTime - end) <= EDGE_SECONDS;
+          if (nearLeft || nearRight) return "crop";
+          if (clickTime >= start && clickTime <= end) return "move";
+        }
+      }
+      // 3) otherwise tapehead
+      return "head";
+    };
+
+    const effectiveMode = mouseMode === "smart" ? getSmartTargetMode() : mouseMode;
+
     // --- DELETE MODE: delete a single clip under the cursor ---
-    if (mouseMode === "delete") {
+    if (effectiveMode === "delete") {
       const clickedClip = clips.find((c) => {
         const start = c.startTime;
         const end = c.startTime + c.duration;
@@ -263,7 +289,7 @@ export function useTrackModel(options = {}) {
     }
 
     // --- CUT MODE: split a clip where we clicked ---
-    if (mouseMode === "cut") {
+    if (effectiveMode === "cut") {
       const clickedClip = clips.find((c) => {
         const start = c.startTime;
         const end = c.startTime + c.duration;
@@ -321,8 +347,8 @@ export function useTrackModel(options = {}) {
       return;
     }
 
-    // --- CLIP MODE: start dragging a clip if we clicked one ---
-    if (mouseMode === "clip") {
+    // --- MOVE MODE: start dragging a clip if we clicked one ---
+    if (effectiveMode === "move") {
       if (clips.length > 0) {
         const clickedClip = clips.find((c) => {
           const start = c.startTime;
@@ -344,28 +370,170 @@ export function useTrackModel(options = {}) {
       return;
     }
 
+    // --- CROP MODE: click near an edge, then drag to trim/extend ---
+    if (effectiveMode === "crop") {
+      if (!clips.length) return;
+
+      const clickedClip = clips.find((c) => {
+        const start = c.startTime;
+        const end = c.startTime + c.duration;
+        return clickTime >= start && clickTime <= end;
+      });
+      if (!clickedClip) return;
+
+      const clipStart = clickedClip.startTime;
+      const clipEnd = clickedClip.startTime + clickedClip.duration;
+
+      // Edge detection threshold: ~10px worth of time (feels like "grab handle")
+      const secondsPerPixel = visibleSeconds / Math.max(1, rect.width);
+      const EDGE_SECONDS = Math.max(0.05, secondsPerPixel * 10);
+
+      const nearLeft = Math.abs(clickTime - clipStart) <= EDGE_SECONDS;
+      const nearRight = Math.abs(clickTime - clipEnd) <= EDGE_SECONDS;
+
+      // Only start crop interaction if user actually clicked near an edge
+      if (!nearLeft && !nearRight) return;
+
+      draggingClipRef.current = {
+        mode: "crop",
+        trackId,
+        clipId: clickedClip.id,
+        edge: nearLeft ? "left" : "right",
+
+        // snapshot original geometry
+        start0: clipStart,
+        end0: clipEnd,
+        duration0: clickedClip.duration,
+        offset0: clickedClip.offset || 0,
+      };
+
+      // Do NOT move head in crop mode
+      return;
+    }
     // --- HEAD MODE (default): move the tape head ---
-    draggingHeadTrackIdRef.current = trackId;
-    const nextHeadTime = clickTime;
-    setHeadTimeSeconds(nextHeadTime);
-
-    // Keep the stored headPos in tracks in sync with the viewport
-    const pos = visibleSeconds > 0 ? (nextHeadTime - viewStartTime) / visibleSeconds : 0;
-    syncHeadPosAllTracks(Math.max(0, Math.min(1, pos)));
-
+    if (effectiveMode === "head") {
+      draggingHeadTrackIdRef.current = trackId;
+      setHeadTimeSeconds(clickTime);
+      return;
+    }
   };
-
-
 
   const handleTrackStripMouseMove = (trackId, e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     let frac = (e.clientX - rect.left) / rect.width; // 0..1
     frac = Math.max(0, Math.min(1, frac));
 
+    // ----- Cursor hinting for CROP/SMART hover (when not dragging) -----
+    if ((mouseMode === "crop" || mouseMode === "smart") && !draggingClipRef.current) {
+      const tracksNow = tracksRef.current || [];
+      const track = tracksNow.find((t) => t.id === trackId);
+      const clips = track?.clips || [];
+
+      if (!track || clips.length === 0) {
+        setStripCursor(e, "default");
+      } else {
+        const visibleSeconds = getTrackLength(track);
+        const hoverTime =
+          visibleSeconds > 0 ? viewStartTime + frac * visibleSeconds : viewStartTime;
+
+        const secondsPerPixel = visibleSeconds / Math.max(1, rect.width);
+        const EDGE_SECONDS = Math.max(0.05, secondsPerPixel * 10); // ~10px grab zone
+
+        let nearAnyEdge = false;
+        let insideAnyClip = false;
+
+        for (const c of clips) {
+          const start = c.startTime;
+          const end = c.startTime + c.duration;
+
+          if (hoverTime >= start && hoverTime <= end) {
+            insideAnyClip = true;
+          }
+
+          if (hoverTime >= start - EDGE_SECONDS && hoverTime <= end + EDGE_SECONDS) {
+            const nearLeft = Math.abs(hoverTime - start) <= EDGE_SECONDS;
+            const nearRight = Math.abs(hoverTime - end) <= EDGE_SECONDS;
+            if (nearLeft || nearRight) {
+              nearAnyEdge = true;
+              break;
+            }
+          }
+        }
+
+        if (nearAnyEdge) setStripCursor(e, "ew-resize");
+        else if (mouseMode === "smart" && insideAnyClip) setStripCursor(e, "grab");
+        else setStripCursor(e, "default");
+      }
+    }
+
+
+    // --- CROP DRAGGING ---
+    if ((mouseMode === "crop" || mouseMode === "smart") && draggingClipRef.current?.mode === "crop") {
+      setStripCursor(e, "ew-resize");
+      const d = draggingClipRef.current;
+      if (d.trackId !== trackId) return; // only crop within same track
+
+      const tracksNow = tracksRef.current || [];
+      const track = tracksNow.find((t) => t.id === trackId);
+      if (!track) return;
+
+      const visibleSeconds = getTrackLength(track);
+      const dragTime =
+        visibleSeconds > 0 ? viewStartTime + frac * visibleSeconds : viewStartTime;
+
+      const MIN_DUR = 0.05;
+
+      if (d.edge === "left") {
+        // Left edge moves; right edge stays fixed at end0
+        const maxStart = d.end0 - MIN_DUR;
+
+        // Allow extending left, but not beyond what offset allows
+        const minStart = Math.max(0, d.start0 - d.offset0);
+
+        const newStart = Math.max(minStart, Math.min(maxStart, dragTime));
+        const newOffset = Math.max(0, d.offset0 + (newStart - d.start0));
+        const newDuration = Math.max(MIN_DUR, d.end0 - newStart);
+
+        setTracks((prev) =>
+          prev.map((t) => {
+            if (t.id !== trackId) return t;
+            const next = (t.clips || []).map((c) =>
+              c.id === d.clipId
+                ? { ...c, startTime: newStart, duration: newDuration, offset: newOffset, image: null }
+                : c
+            );
+            return { ...t, clips: next };
+          })
+        );
+      } else {
+        // Right edge moves; left edge stays fixed at start0
+        const minEnd = d.start0 + MIN_DUR;
+        const newEnd = Math.max(minEnd, dragTime);
+        const newDuration = Math.max(MIN_DUR, newEnd - d.start0);
+
+        setTracks((prev) =>
+          prev.map((t) => {
+            if (t.id !== trackId) return t;
+            const next = (t.clips || []).map((c) =>
+              c.id === d.clipId
+                ? { ...c, startTime: d.start0, duration: newDuration, offset: d.offset0, image: null }
+                : c
+            );
+            return { ...t, clips: next };
+          })
+        );
+      }
+
+      return; // don't fall through to head/clip drag
+    }
+
     // --- CLIP DRAGGING ---
-    if (mouseMode === "clip" && draggingClipRef.current) {
-      const { trackId: fromTrackId, clipId, offsetTime } =
-        draggingClipRef.current;
+    if (
+      (mouseMode === "move" || mouseMode === "smart") &&
+      draggingClipRef.current &&
+      draggingClipRef.current.mode !== "crop"
+    ) {
+      const { trackId: fromTrackId, clipId, offsetTime } = draggingClipRef.current;
 
       // Same-track drag
       if (fromTrackId === trackId) {
@@ -534,7 +702,7 @@ export function useTrackModel(options = {}) {
       // IMPORTANT:
       // Do NOT pointer-capture in "clip" mode, otherwise pointermove will keep firing
       // on the original track and you can’t move clips between tracks.
-      if (mouseMode !== "clip") {
+      if (mouseMode !== "move" && mouseMode !== "smart") {
         try {
           e.currentTarget?.setPointerCapture?.(e.pointerId);
         } catch (_) {}
