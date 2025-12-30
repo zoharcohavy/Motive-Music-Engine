@@ -19,76 +19,71 @@ export default function TopControls({
 
   return (
     <div className="topControls__col">
-      {/* Top bar: room buttons left, room info centered */}
+      {/* Top bar: waveform (left) + room controls (center) on the SAME row */}
       <div className="topControls__row">
-        {/* Left: room buttons */}
+        {/* Left: Waveform selector (piano only) */}
         <div className="topControls__left">
-          <button
-            type="button"
-            onClick={roomStatus === "connected" ? disconnectRoom : openRoomModal}
-            className={`topControls__roomBtn ${
-              roomStatus === "connected" ? "topControls__roomBtn--connected" : ""
-            }`}
-          >
-            {roomStatus === "connected" ? "Leave Room" : "Connect to Room"}
-          </button>
-
-          {roomStatus === "connected" && (
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-              <button
-                type="button"
-                onClick={handleRoomRecordToggle}
-                className={`topControls__roomRecBtn roomAllowedStop ${
-                  roomRecordPhase !== "idle" ? "topControls__roomRecBtn--active" : ""
-                }`}
+          {showWaveform && (
+            <div className="topControls__group">
+              <label>Waveform:</label>
+              <select
+                className="select--compact"
+                value={waveform}
+                onChange={(e) => setWaveform(e.target.value)}
               >
-                {roomRecordPhase !== "idle" ? "⏹ Stop Room Record" : "⏺ Record Room"}
-              </button>
-
-              {typeof roomCountdownSeconds === "number" && (
-                <span style={{ fontWeight: 800 }}>{roomCountdownSeconds}</span>
-              )}
+                <option value="sine">Sine</option>
+                <option value="square">Square</option>
+                <option value="sawtooth">Sawtooth</option>
+                <option value="triangle">Triangle</option>
+              </select>
             </div>
           )}
-
-
         </div>
 
-        {/* Center: room + usernames */}
-        <div className="topControls__center">
+        {/* Center: Room controls */}
+        <div className="topControls__center" style={{ opacity: 1 }}>
           {roomStatus === "connected" && roomId ? (
-            <>
-              Room: <strong>{roomId}</strong>
-              {" · "}
-              Users: {usersLabel}
-            </>
+            <div className="topControls__rooms">
+              <div className="topControls__centerButtons">
+                <button
+                  type="button"
+                  onClick={disconnectRoom}
+                  className="topControls__roomBtn topControls__roomBtn--connected"
+                >
+                  Leave Room
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRoomRecordToggle}
+                  className={`topControls__roomRecBtn roomAllowedStop ${
+                    roomRecordPhase !== "idle" ? "topControls__roomRecBtn--active" : ""
+                  }`}
+                >
+                  {roomRecordPhase !== "idle" ? "⏹ Stop Room Record" : "⏺ Record Room"}
+                </button>
+
+                {typeof roomCountdownSeconds === "number" && (
+                  <span className="topControls__countdown">{roomCountdownSeconds}</span>
+                )}
+              </div>
+
+              <div className="topControls__centerInfo">
+                Room: <strong>{roomId}</strong>
+                {" · "}
+                Users: {usersLabel}
+              </div>
+            </div>
           ) : (
-            <span className="topControls__notInRoom">Not in a room</span>
+            <button type="button" onClick={openRoomModal} className="topControls__roomBtn">
+              Connect to Room
+            </button>
           )}
         </div>
 
-        {/* Right spacer */}
+        {/* Right: spacer to keep center truly centered */}
         <div className="topControls__spacer" />
       </div>
-
-      {/* Waveform selector (piano only) */}
-      {showWaveform && (
-        <div className="topControls__rowWrap">
-          <div className="topControls__group">
-            <label>Waveform:</label>
-            <select
-              className="select--compact"
-              value={waveform}
-              onChange={(e) => setWaveform(e.target.value)}
-            >
-              <option value="sine">Sine</option>
-              <option value="square">Square</option>
-              <option value="sawtooth">Sawtooth</option>
-              <option value="triangle">Triangle</option>
-            </select>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

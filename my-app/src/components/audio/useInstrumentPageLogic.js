@@ -22,6 +22,11 @@ export function useInstrumentPageLogic() {
   // Always-available “bridge” so audioEngine can send WS messages even though room is created first
   const sendRoomMessageRef = useRef(null);
 
+  const precheckResponderRef = useRef(null);
+  const precheckCollectorRef = useRef(null);
+  const roomPrecheckSessionRef = useRef({ requestId: null, results: {} });
+
+
   // Keep room status reactive for useAudioEngine (a ref won’t trigger updates)
   const [roomStatusForEngine, setRoomStatusForEngine] = useState("disconnected");
 
@@ -51,6 +56,9 @@ export function useInstrumentPageLogic() {
       // SAFE + returns promise so UI stays “finalizing” until finished
       return recordingRef.current?.stopRoomArmedTracks(sessionFolder);
     },
+    onPrecheckRequest: (msg) => precheckResponderRef.current?.(msg),
+    onPrecheckResponse: (msg) => precheckCollectorRef.current?.(msg),
+
   });
   useEffect(() => {
     // Bridge for engine broadcasting notes
@@ -92,6 +100,177 @@ export function useInstrumentPageLogic() {
   };
 
   const trackModel = useTrackModel({ playClipUrl });
+  
+  // Aliases for recording-guard helpers (so we can use simple names below)
+  const { tracks, setTracks, headTimeSeconds } = trackModel;
+
+  // --- Recording guard (blocks recording if ARMED tracks have clips to the right of tape-head) ---
+  const [recordGuard, setRecordGuard] = useState(null);
+  const clearRecordGuard = () => setRecordGuard(null);
+
+  const getArmedTracks = () => (tracks || []).filter((t) => t?.isRecEnabled);
+
+  const getConflictingClips = () => {
+    const head = Number(trackModel.headTimeSeconds || 0);
+    const armed = getArmedTracks();
+    const conflicts = [];
+
+    for (const t of armed) {
+      for (const c of t.clips || []) {
+        const s = Number(c.startTime || 0);
+        const d = Number(c.duration || 0);
+        if (s + d > head) 
+          conflicts.push({ trackId: t.id, clipId: c.id });
+      }
+    }
+    return conflicts;
+  };
+  const getLocalRoomPrecheckSummary = () => {
+    const armed = getArmedTracks();
+
+    // IMPORTANT: read the latest head time right now
+    const head = Number(trackModel.headTimeSeconds || 0);
+
+    let tracksNeedingClear = 0;
+    let clipCount = 0;
+
+    for (const t of armed) {
+      let trackHasConflict = false;
+      for (const c of t.clips || []) {
+        const s = Number(c.startTime || 0);
+        const d = Number(c.duration || 0);
+
+        // Only block if the clip truly overlaps/extends past the playhead
+        if (s + d > head) {
+          clipCount += 1;
+          trackHasConflict = true;
+        }
+      }
+      if (trackHasConflict) tracksNeedingClear += 1;
+    }
+
+    return { tracksNeedingClear, clipCount };
+  };
+
+  precheckResponderRef.current = (msg) => {
+    const requestId = msg?.requestId;
+    if (!requestId) return;
+
+    const summary = getLocalRoomPrecheckSummary();
+
+    room.sendRoomMessage?.({
+      type: "precheck_response",
+      requestId,
+      username: room.username || "Anonymous",
+      tracksNeedingClear: summary.tracksNeedingClear,
+      clipCount: summary.clipCount,
+    });
+  };
+
+
+  const deleteClipsToRightOfHead = () => {
+    const conflicts = getConflictingClips();
+    if (!conflicts.length) return;
+
+    setTracks((prev) =>
+      (prev || []).map((t) => {
+        if (!t?.isRecEnabled) return t;
+
+        const ids = new Set(
+          conflicts.filter((x) => x.trackId === t.id).map((x) => x.clipId)
+        );
+        if (!ids.size) return t;
+
+        return { ...t, clips: (t.clips || []).filter((c) => !ids.has(c.id)) };
+      })
+    );
+  };
+
+  const checkAndBlockRecordingIfNeeded = () => {
+    const conflicts = getConflictingClips();
+    if (!conflicts.length) return false;
+
+    setRecordGuard({ clipCount: conflicts.length });
+    return true;
+  };
+
+  // WRAPPERS: these are what actually stop recording from starting
+  const requestToggleGlobalRecord = () => {
+    const currentlyRecording = Boolean(recording?.isGlobalRecording);
+
+    // Only block when STARTING (not when STOPPING)
+    if (!currentlyRecording) {
+      if (checkAndBlockRecordingIfNeeded()) return;
+    }
+
+    recording?.toggleGlobalRecord?.();
+  };
+
+
+
+  const requestToggleRoomRecord = async () => {
+    // 1) Local block first (use existing popup behavior)
+    if (checkAndBlockRecordingIfNeeded()) return;
+
+    // 2) If not connected, just do nothing
+    if (room.roomStatus !== "connected") return;
+
+    // 3) Start a room-wide precheck
+    const requestId =
+      (typeof crypto !== "undefined" && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+    roomPrecheckSessionRef.current = { requestId, results: {} };
+
+    // Collector: store responses for this requestId
+    precheckCollectorRef.current = (msg) => {
+      if (msg?.requestId !== requestId) return;
+      const u = msg?.username || "Unknown";
+      roomPrecheckSessionRef.current.results[u] = {
+        username: u,
+        tracksNeedingClear: Number(msg.tracksNeedingClear || 0),
+        clipCount: Number(msg.clipCount || 0),
+      };
+    };
+
+        // Ask everyone to report (NOTE: WS servers often do NOT echo to sender)
+    // So we ALWAYS include our own result immediately.
+    const selfUsername = room.username || "Anonymous";
+    const selfSummary = getLocalRoomPrecheckSummary();
+    roomPrecheckSessionRef.current.results[selfUsername] = {
+      username: selfUsername,
+      tracksNeedingClear: Number(selfSummary.tracksNeedingClear || 0),
+      clipCount: Number(selfSummary.clipCount || 0),
+    };
+
+    room.sendRoomMessage?.({ type: "precheck_request", requestId });
+
+    // Wait a short moment to gather responses
+    await new Promise((r) => setTimeout(r, 900));
+
+    const resultsObj = roomPrecheckSessionRef.current.results || {};
+    const results = Object.values(resultsObj);
+
+
+
+    // If anyone needs clearing, block with room-style popup
+    const offenders = results.filter((x) => (x.tracksNeedingClear || 0) > 0);
+
+    if (offenders.length) {
+      setRecordGuard({
+        mode: "room",
+        offenders,
+        selfUsername: room.username || "Anonymous",
+      });
+      return;
+    }
+
+    // If all clear, start room record
+    room.toggleRoomRecord?.();
+  };
+
+
 
   // Keep audio routing in sync with track mute/solo and live inputs
   useEffect(() => {
@@ -224,7 +403,6 @@ export function useInstrumentPageLogic() {
       );
     }, 200);
   };
-
 
   // ===== Upload an existing audio file and place it on a track as a clip =====
   const getAudioDurationSeconds = (file) =>
@@ -378,8 +556,12 @@ export function useInstrumentPageLogic() {
 
     // ===== Recording controls + recordings list =====
     isGlobalRecording: recording.isGlobalRecording,
-    toggleGlobalRecord: recording.toggleGlobalRecord,
-    handleRoomRecordToggle: room.toggleRoomRecord,
+    toggleGlobalRecord: requestToggleGlobalRecord,
+    handleRoomRecordToggle: requestToggleRoomRecord,
+    recordGuard,
+    clearRecordGuard,
+    deleteClipsToRightOfHead: deleteClipsToRightOfHead,
+
     roomRecordPhase: room.roomRecordPhase,
     isRoomLocked: room.isRoomLocked,
     recordings: recording.recordings,

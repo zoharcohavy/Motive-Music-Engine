@@ -7,7 +7,6 @@ import TrackSection from "../components/Tracks/TrackSection";
 import RoomModal from "../components/Rooms/RoomModal";
 import TrackFxModal from "../components/Controls/TrackFxModal";
 import { getDefaultDrumAnchors } from "../components/audio/SoundBoards/DrumLayoutDefaults";
-
 import PianoKeyboard from "../components/audio/SoundBoards/PianoKeyboard";
 import DrumMachine from "../components/audio/SoundBoards/DrumMachine";
 
@@ -15,7 +14,6 @@ import { KEYS, getKeyIndexForKeyboardChar } from "../components/audio/constants"
 import { useInstrumentHotkeys } from "../components/audio/SoundBoards/useInstrumentHotkeys";
 import { useDrumPadConfig } from "../components/audio/SoundBoards/useDrumPadConfig";
 import { usePersistedState } from "../components/ui/usePersistedState";
-import CollapsibleNotice from "../components/ui/CollapsibleNotice";
 import DrumPadCustomizer from "../components/audio/SoundBoards/DrumPadCustomizer";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -23,6 +21,9 @@ import { useLocation, useNavigate } from "react-router-dom";
 import PianoImg from "../assets/icons/Piano.jpg";
 import DrumImg from "../assets/images/DrumImage.jpeg";
 import SamplerImg from "../assets/icons/tools.svg";
+import SineWaveIcon from "../assets/icons/sine-wave.svg";
+import AppModal from "../components/ui/AppModal";
+
 
 
 
@@ -60,6 +61,10 @@ export default function InstrumentPage({ instrument }) {
 
     toggleGlobalRecord,
     isGlobalRecording,
+    recordGuard,
+    clearRecordGuard,
+    deleteClipsToRightOfHead,
+
 
     toggleTrackRecEnabled,
     toggleTrackMuted,
@@ -109,9 +114,10 @@ export default function InstrumentPage({ instrument }) {
   );
 
   const [interfaceTrackId, setInterfaceTrackId] = useState(null);
-    const [isInputModalOpen, setIsInputModalOpen] = useState(false);
+  const [isInputModalOpen, setIsInputModalOpen] = useState(false);
   const [audioInputs, setAudioInputs] = useState([]);
   const [selectedInputDeviceId, setSelectedInputDeviceId] = useState("");
+  
 
   const closeInputModal = () => {
     setIsInputModalOpen(false);
@@ -196,10 +202,11 @@ export default function InstrumentPage({ instrument }) {
 
 
 // Hide advanced panels by default, but remember the user's choice.
-  const [isWaveformOpen, setIsWaveformOpen] = usePersistedState(
-    "ui.instrumentPage.waveformOpen",
+  const [isLiveWaveformOn, setIsLiveWaveformOn] = usePersistedState(
+    "ui.instrumentPage.liveWaveformOn",
     false
   );
+
       const [isRecPanelOpen, setIsRecPanelOpen] = usePersistedState(
       "ui.instrumentPage.recPanelOpen",
       true
@@ -209,6 +216,9 @@ export default function InstrumentPage({ instrument }) {
     "ui.trackControlsWidth",
     96
   );
+
+  const [deleteClipsOnDismiss, setDeleteClipsOnDismiss] = useState(false);
+
 
 
 
@@ -322,12 +332,41 @@ export default function InstrumentPage({ instrument }) {
         storageError={storageError}
       />
 
+      {/* Mouse mode + Live Waveform ribbon + monitor (monitor docks to the right without shifting buttons) */}
+      <div className="mouseModeRow">
+        <div className="mouseModeDock">
+          <div className="card mouseModeCard">
+            <MouseModeToggle mouseMode={mouseMode} setMouseMode={setMouseMode} />
+          </div>
 
+          {/* Live waveform ribbon */}
+          <button
+            type="button"
+            className={`liveWaveRibbon ${isLiveWaveformOn ? "active" : ""}`}
+            onClick={() => setIsLiveWaveformOn((v) => !v)}
+            aria-pressed={isLiveWaveformOn}
+            title="Live waveform"
+          >
+            <img
+              src={SineWaveIcon}
+              alt=""
+              draggable={false}
+              className="liveWaveRibbon__icon"
+            />
+            <span className="liveWaveRibbon__text">Live</span>
+          </button>
+
+          {isLiveWaveformOn && (
+            <div className="card liveWaveCard liveWaveCard--docked">
+              <canvas ref={waveCanvasRef} className="wave-canvas" />
+            </div>
+          )}
+        </div>
       {/* Top controls */}
       <TopControls
         waveform={waveform}
         setWaveform={setWaveform}
-        showWaveform={!isDrums}
+        showWaveform={false}
         roomId={roomId}
         roomStatus={roomStatus}
         openRoomModal={openRoomModal}
@@ -338,26 +377,9 @@ export default function InstrumentPage({ instrument }) {
         roomCountdownSeconds={roomCountdownSeconds}
         roomRecordPhase={roomRecordPhase}
       />
-
-            {/* Live waveform (collapsible) */}
-      <CollapsibleNotice
-        title="Live waveform"
-        subtitle="(click to expand)"
-        isOpen={isWaveformOpen}
-        setIsOpen={setIsWaveformOpen}
-        className="notice--mini"
-      >
-        <div className="card">
-          <canvas ref={waveCanvasRef} className="wave-canvas" />
-        </div>
-      </CollapsibleNotice>
-
-      {/* Mouse mode (collapsible) */}
-      {/* Mouse mode */}
-      <div className="card mouseModeCard">
-        <MouseModeToggle mouseMode={mouseMode} setMouseMode={setMouseMode} />
       </div>
- 
+
+
       {/* Tracks */}
       <TrackSection
         tracks={tracks}
@@ -434,6 +456,8 @@ export default function InstrumentPage({ instrument }) {
           </>
         ) : (
           <PianoKeyboard
+            waveform={waveform}
+            setWaveform={setWaveform}
             activeKeyIds={activeKeyIds}
             onMouseDownKey={handleKeyMouseDown}
             onMouseEnterKey={handleKeyMouseEnter}
@@ -457,6 +481,75 @@ export default function InstrumentPage({ instrument }) {
         />
       )}
 
+      <AppModal
+        isOpen={!!recordGuard}
+        title="Recording blocked"
+        onClose={() => {
+          if (deleteClipsOnDismiss) deleteClipsToRightOfHead?.();
+          setDeleteClipsOnDismiss(false);
+          clearRecordGuard?.();
+        }}
+        onEnter={() => {
+          if (deleteClipsOnDismiss) deleteClipsToRightOfHead?.();
+          setDeleteClipsOnDismiss(false);
+          clearRecordGuard?.();
+        }}
+      >
+        {recordGuard?.mode === "room" ? (
+          <>
+            <p className="appModal__small">
+              Room recording is blocked. Some users have record-armed tracks that need clearing.
+            </p>
+
+            <div style={{ marginTop: 10 }}>
+              {(recordGuard?.offenders || []).map((o) => (
+                <div key={o.username} className="appModal__small" style={{ marginBottom: 6 }}>
+                  <strong>{o.username}</strong>:{" "}
+                  {o.missing
+                    ? "Not responding / can’t verify"
+                    : `${o.tracksNeedingClear} track${o.tracksNeedingClear === 1 ? "" : "s"} (${o.clipCount} clip${o.clipCount === 1 ? "" : "s"})`}
+                </div>
+              ))}
+            </div>
+
+            <p className="appModal__small" style={{ marginTop: 10 }}>
+              You can only delete <strong>your</strong> clips. Other users must clear theirs on their own.
+            </p>
+          </>
+        ) : (
+          <p className="appModal__small">
+            You have {recordGuard?.clipCount || 0} clip{(recordGuard?.clipCount || 0) === 1 ? "" : "s"} to the right of the tape-head.
+            Recording is disabled to prevent overwriting existing audio.
+          </p>
+        )}
+
+      {recordGuard?.mode !== "room" ||
+      (recordGuard?.offenders || []).some((o) => o.username === username) ? (
+        <label className="appModal__checkboxRow">
+          <input
+            type="checkbox"
+            checked={deleteClipsOnDismiss}
+            onChange={(e) => setDeleteClipsOnDismiss(e.target.checked)}
+          />
+          <span className="appModal__small">
+            Delete clips to the right of the tape-head when closing this popup
+          </span>
+        </label>
+      ) : null}
+        <div className="appModal__footer" style={{ padding: 0, marginTop: "0.9rem" }}>
+          <button
+            type="button"
+            className="appModal__btn"
+            onClick={() => {
+              if (deleteClipsOnDismiss) deleteClipsToRightOfHead?.();
+              setDeleteClipsOnDismiss(false);
+              clearRecordGuard?.();
+            }}
+          >
+            Close
+          </button>
+        </div>
+      </AppModal>
 
       {/* Modals */}
       <TrackFxModal

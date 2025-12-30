@@ -5,6 +5,8 @@ export default function PianoKeyboard({
   activeKeyIds,
   onMouseDownKey,
   onMouseEnterKey,
+  waveform,
+  setWaveform,
 }) {
   const [isMouseDown, setIsMouseDown] = useState(false);
   const whiteKeys = [];
@@ -51,6 +53,22 @@ export default function PianoKeyboard({
       onMouseUp={() => setIsMouseDown(false)}
       onMouseLeave={() => setIsMouseDown(false)}
     >
+      {/* Waveform selector (piano only) */}
+      {typeof setWaveform === "function" ? (
+        <div className="pianoKb__waveformCtl">
+          <select
+            className="pianoKb__waveformSelect"
+            value={waveform || "sine"}
+            onChange={(e) => setWaveform(e.target.value)}
+            aria-label="Waveform"
+          >
+            <option value="sine">Sine</option>
+            <option value="triangle">Triangle</option>
+            <option value="square">Square</option>
+            <option value="sawtooth">Saw</option>
+          </select>
+        </div>
+      ) : null}
 
       <div className="pianoKb__inner">
         {/* White keys */}
