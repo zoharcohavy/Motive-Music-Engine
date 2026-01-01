@@ -37,6 +37,33 @@ export function useRecording({
   const roomSessionFolderRef = useRef(null);
   const roomUsernameRef = useRef("Anonymous");
 
+  const roomKeepAliveRef = useRef(new Map()); 
+  const makeKeepAliveCombinedStream = (baseStream, trackId) => {
+    try {
+      const ctx = getAudioContext();
+      if (!ctx || !baseStream) return baseStream;
+
+      const dest = ctx.createMediaStreamDestination();
+      const src = new ConstantSourceNode(ctx, { offset: 0 });
+      const gain = new GainNode(ctx, { gain: 0 });
+
+      src.connect(gain);
+      gain.connect(dest);
+      src.start();
+
+      roomKeepAliveRef.current.set(trackId, { src, gain });
+
+      return new MediaStream([
+        ...baseStream.getAudioTracks(),
+        ...dest.stream.getAudioTracks(),
+      ]);
+    } catch {
+      return baseStream;
+    }
+  };
+
+  // key: trackId, value: { src, gain }
+
   // Flags for UI
   const [isRoomRecording, setIsRoomRecording] = useState(false);
   const [isGlobalRecording, setIsGlobalRecording] = useState(false);
@@ -463,12 +490,15 @@ export function useRecording({
       const stream = audioEngine.getTrackRecordStream?.(t.id);
       if (!stream) continue;
 
+      const combinedStream = makeKeepAliveCombinedStream(stream, t.id);
+
       let recorder;
       try {
-        recorder = new MediaRecorder(stream);
+        recorder = new MediaRecorder(combinedStream);
       } catch {
         continue;
       }
+
 
       const entry = { recorder, chunks: [] };
       trackRecordersRef.current.set(t.id, entry);
@@ -567,6 +597,15 @@ export function useRecording({
   };
 
   const stopRoomArmedTracks = () => {
+    for (const [, ka] of roomKeepAliveRef.current.entries()) {
+      try {
+        ka.src.stop();
+        ka.src.disconnect();
+        ka.gain.disconnect();
+      } catch {}
+    }
+    roomKeepAliveRef.current.clear();
+
     const map = trackRecordersRef.current;
 
     // Stop anything that's actually recording, regardless of isRoomRecording state.

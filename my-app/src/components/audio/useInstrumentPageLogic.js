@@ -48,9 +48,11 @@ export function useInstrumentPageLogic() {
     },
 
     onRoomRecordStart: (sessionFolder) => {
-      // SAFE: recording might not exist yet at the moment WS message arrives
+      const uiBlockedNow = Boolean(recordGuard) || Boolean(room.isRoomModalOpen);
+      if (uiBlockedNow) return;
       recordingRef.current?.startRoomArmedTracks(sessionFolder, usernameRef.current);
     },
+
 
     onRoomRecordStop: (sessionFolder) => {
       // SAFE + returns promise so UI stays “finalizing” until finished
@@ -107,6 +109,9 @@ export function useInstrumentPageLogic() {
   // --- Recording guard (blocks recording if ARMED tracks have clips to the right of tape-head) ---
   const [recordGuard, setRecordGuard] = useState(null);
   const clearRecordGuard = () => setRecordGuard(null);
+  // Any blocking UI that could freeze/interrupt room-record start
+  const isUiBlocked = Boolean(recordGuard) || Boolean(room.isRoomModalOpen);
+
 
   const getArmedTracks = () => (tracks || []).filter((t) => t?.isRecEnabled);
 
@@ -164,7 +169,9 @@ export function useInstrumentPageLogic() {
       username: room.username || "Anonymous",
       tracksNeedingClear: summary.tracksNeedingClear,
       clipCount: summary.clipCount,
+      uiBlocked: Boolean(isUiBlocked),
     });
+
   };
 
 
@@ -231,6 +238,7 @@ export function useInstrumentPageLogic() {
         username: u,
         tracksNeedingClear: Number(msg.tracksNeedingClear || 0),
         clipCount: Number(msg.clipCount || 0),
+        uiBlocked: Boolean(msg.uiBlocked),
       };
     };
 
@@ -242,6 +250,7 @@ export function useInstrumentPageLogic() {
       username: selfUsername,
       tracksNeedingClear: Number(selfSummary.tracksNeedingClear || 0),
       clipCount: Number(selfSummary.clipCount || 0),
+      uiBlocked: Boolean(isUiBlocked),
     };
 
     room.sendRoomMessage?.({ type: "precheck_request", requestId });
@@ -252,6 +261,20 @@ export function useInstrumentPageLogic() {
     const resultsObj = roomPrecheckSessionRef.current.results || {};
     const results = Object.values(resultsObj);
 
+    // Require everyone to respond; missing users are treated as "not ready"
+    const expected = Array.from(new Set([...(room.roomUsernames || []), selfUsername]));
+    const missing = expected.filter((name) => !resultsObj[name]);
+
+    if (missing.length) {
+      setRecordGuard({ mode: "ready" });
+      return;
+    }
+
+    const blockedUsers = results.filter((x) => x.uiBlocked);
+    if (blockedUsers.length) {
+      setRecordGuard({ mode: "ready" }); // simplest popup mode
+      return;
+    }
 
 
     // If anyone needs clearing, block with room-style popup
