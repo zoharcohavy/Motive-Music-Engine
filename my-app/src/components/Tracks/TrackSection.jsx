@@ -390,15 +390,7 @@ export default function TrackSection({
               <button
                 type="button"
                 className="btn trackSection__fxBtn"
-                onClick={() => {
-                  const clipCount = (track.clips || []).length;
-                  if (clipCount > 0) {
-                    setConfirmDeleteTrackId(track.id);
-                    setConfirmDeleteClipCount(clipCount);
-                    return;
-                  }
-                  deleteTrack(track.id);
-                }}
+                onClick={() => onOpenFx?.(track.id)}
 
                 title="Track effects"
               >

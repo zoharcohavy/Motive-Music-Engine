@@ -171,14 +171,24 @@ select:focus, button:focus, input:focus {
   width: 70px;
   padding: 2px;
   position: absolute;
-  left: 0;
+  left: -55px;
   top: 16px;
-  transform: translateX(calc(-100% - 2px));
 }
 
 .instrumentMain {
   flex: 1;
   min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px; /* space between center UI and recordings tab */
+}
+/* New: inner column for the DAW UI */
+.instrumentMain__inner {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
 .instrumentMenu__title {
@@ -241,24 +251,33 @@ select:focus, button:focus, input:focus {
 }
 
 @media (max-width: 900px) {
-  .instrumentLayout {
-    flex-direction: column;
-  }
+    .instrumentMenu {
+        width: 100%;
+        position: static;
+    }
 
-  .instrumentMenu {
-    width: 100%;
-    position: static;
-  }
+    .instrumentMenu__grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
 
-  .instrumentMenu__grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+    .instrumentMenu__img {
+        width: 100%;
+        height: 64px;
+    }
 
-  .instrumentMenu__img {
-    width: 100%;
-    height: 64px;
-  }
+    /* Stack main content + recordings vertically on small screens */
+    .instrumentMain {
+        flex-direction: column;
+    }
+
+    .recPanel {
+        flex: 0 0 auto;
+        max-width: none;
+        width: 100%;
+        order: -1; /* show the recordings tab/panel at the top */
+    }
 }
+
 
 .fxModal__overlay {
   position: fixed;
@@ -537,3 +556,43 @@ select:focus, button:focus, input:focus {
 .appModal__btn--danger {
   background: rgba(255, 80, 80, 0.15);
 }
+
+
+/* Right-side recordings tab/panel */
+.recPanel {
+    flex: 0 0 220px; /* fixed width column on the right */
+    max-width: 220px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 8px;
+    color: var(--text);
+}
+
+/* Header looks like a chunky tab */
+.recPanel__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 4px 8px;
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+}
+
+/* When open, the list lives underneath the tab */
+.recPanel__body {
+    margin-top: 6px;
+    max-height: 260px;
+    overflow: auto;
+}
+
+/* Collapsed state: keep the “tab” but hide the body */
+.recPanel--collapsed .recPanel__body {
+    display: none;
+}
+
+
