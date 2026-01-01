@@ -505,9 +505,9 @@ export default function InstrumentPage({ instrument }) {
               {(recordGuard?.offenders || []).map((o) => (
                 <div key={o.username} className="appModal__small" style={{ marginBottom: 6 }}>
                   <strong>{o.username}</strong>:{" "}
-                  {o.missing
-                    ? "Not responding / can’t verify"
-                    : `${o.tracksNeedingClear} track${o.tracksNeedingClear === 1 ? "" : "s"} (${o.clipCount} clip${o.clipCount === 1 ? "" : "s"})`}
+                  {`${o.tracksNeedingClear} track${o.tracksNeedingClear === 1 ? "" : "s"} (${o.clipCount} clip${
+                    o.clipCount === 1 ? "" : "s"
+                  })`}
                 </div>
               ))}
             </div>
@@ -516,15 +516,30 @@ export default function InstrumentPage({ instrument }) {
               You can only delete <strong>your</strong> clips. Other users must clear theirs on their own.
             </p>
           </>
+        ) : recordGuard?.mode === "ready" ? (
+          <p className="appModal__small">make sure all users are ready</p>
         ) : (
           <p className="appModal__small">
-            You have {recordGuard?.clipCount || 0} clip{(recordGuard?.clipCount || 0) === 1 ? "" : "s"} to the right of the tape-head.
-            Recording is disabled to prevent overwriting existing audio.
+            You have {recordGuard?.clipCount || 0} clip{(recordGuard?.clipCount || 0) === 1 ? "" : "s"} to
+            the right of the tape-head. Recording is disabled to prevent overwriting existing audio.
           </p>
         )}
 
-      {recordGuard?.mode !== "room" ||
-      (recordGuard?.offenders || []).some((o) => o.username === username) ? (
+
+      {recordGuard?.mode === "room" ? (
+        (recordGuard?.offenders || []).some((o) => o.username === username) ? (
+          <label className="appModal__checkboxRow">
+            <input
+              type="checkbox"
+              checked={deleteClipsOnDismiss}
+              onChange={(e) => setDeleteClipsOnDismiss(e.target.checked)}
+            />
+            <span className="appModal__small">
+              Delete clips to the right of the tape-head when closing this popup
+            </span>
+          </label>
+        ) : null
+      ) : recordGuard?.mode !== "ready" ? (
         <label className="appModal__checkboxRow">
           <input
             type="checkbox"
@@ -536,6 +551,7 @@ export default function InstrumentPage({ instrument }) {
           </span>
         </label>
       ) : null}
+
         <div className="appModal__footer" style={{ padding: 0, marginTop: "0.9rem" }}>
           <button
             type="button"
