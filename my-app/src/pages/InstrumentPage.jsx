@@ -331,39 +331,39 @@ export default function InstrumentPage({ instrument }) {
         storageFiles={storageFiles}
         storageError={storageError}
       />
-
-      {/* Mouse mode + Live Waveform ribbon + monitor (monitor docks to the right without shifting buttons) */}
-      <div className="mouseModeRow">
+      <div className="instrumentMain__inner">
+        {/* Mouse mode + Live Waveform ribbon + monitor (monitor docks to the right without shifting buttons) */}
+        <div className="mouseModeRow">
         <div className="mouseModeDock">
-          <div className="card mouseModeCard">
+            <div className="card mouseModeCard">
             <MouseModeToggle mouseMode={mouseMode} setMouseMode={setMouseMode} />
-          </div>
+            </div>
 
-          {/* Live waveform ribbon */}
-          <button
+            {/* Live waveform ribbon */}
+            <button
             type="button"
             className={`liveWaveRibbon ${isLiveWaveformOn ? "active" : ""}`}
             onClick={() => setIsLiveWaveformOn((v) => !v)}
             aria-pressed={isLiveWaveformOn}
             title="Live waveform"
-          >
+            >
             <img
-              src={SineWaveIcon}
-              alt=""
-              draggable={false}
-              className="liveWaveRibbon__icon"
+                src={SineWaveIcon}
+                alt=""
+                draggable={false}
+                className="liveWaveRibbon__icon"
             />
             <span className="liveWaveRibbon__text">Live</span>
-          </button>
+            </button>
 
-          {isLiveWaveformOn && (
+            {isLiveWaveformOn && (
             <div className="card liveWaveCard liveWaveCard--docked">
-              <canvas ref={waveCanvasRef} className="wave-canvas" />
+                <canvas ref={waveCanvasRef} className="wave-canvas" />
             </div>
-          )}
+            )}
         </div>
-      {/* Top controls */}
-      <TopControls
+        {/* Top controls */}
+        <TopControls
         waveform={waveform}
         setWaveform={setWaveform}
         showWaveform={false}
@@ -376,12 +376,12 @@ export default function InstrumentPage({ instrument }) {
         roomUsernames={roomUsernames}
         roomCountdownSeconds={roomCountdownSeconds}
         roomRecordPhase={roomRecordPhase}
-      />
-      </div>
+        />
+        </div>
 
 
-      {/* Tracks */}
-      <TrackSection
+        {/* Tracks */}
+        <TrackSection
         tracks={tracks}
         viewStartTime={viewStartTime}
         setViewStartTime={setViewStartTime}
@@ -418,204 +418,204 @@ export default function InstrumentPage({ instrument }) {
         mouse_interactions={mouse_interactions}
         trackCanvasRefs={trackCanvasRefs}
         onOpenFx={openFxForTrack}
-      />
+        />
 
-      {/* Soundboard */}
-      <div className="roomAllowedInstrument">
+        {/* Soundboard */}
+        <div className="roomAllowedInstrument">
         {isDrums ? (
-          <>
+            <>
             <DrumMachine
-              layout="kit"
-              drumImageScale={drumImageScale}
-              drumKeyOpacity={drumKeyOpacity}
-              drumAnchors={drumAnchors}
-              setDrumAnchors={setDrumAnchors}
-              pads={drumConfig.pads}
-              activeKeyIds={activeKeyIds}
-              onMouseDownKey={handleKeyMouseDown}
-              onMouseEnterKey={handleKeyMouseEnter}
-              getCharForPadId={drumConfig.getCharForPadId}
-              showCustomize={showDrumCustomize}
-              onToggleCustomize={() => setShowDrumCustomize((v) => !v)}
+                layout="kit"
+                drumImageScale={drumImageScale}
+                drumKeyOpacity={drumKeyOpacity}
+                drumAnchors={drumAnchors}
+                setDrumAnchors={setDrumAnchors}
+                pads={drumConfig.pads}
+                activeKeyIds={activeKeyIds}
+                onMouseDownKey={handleKeyMouseDown}
+                onMouseEnterKey={handleKeyMouseEnter}
+                getCharForPadId={drumConfig.getCharForPadId}
+                showCustomize={showDrumCustomize}
+                onToggleCustomize={() => setShowDrumCustomize((v) => !v)}
             />
-          </>
+            </>
         ) : isSampler ? (
-          <>
+            <>
             <DrumMachine
-              layout="grid"
-              drumImageScale={samplerImageScale}
-              drumKeyOpacity={samplerKeyOpacity}
-              pads={drumConfig.pads}
-              activeKeyIds={activeKeyIds}
-              onMouseDownKey={handleKeyMouseDown}
-              onMouseEnterKey={handleKeyMouseEnter}
-              getCharForPadId={drumConfig.getCharForPadId}
-              showCustomize={showDrumCustomize}
-              onToggleCustomize={() => setShowDrumCustomize((v) => !v)}
+                layout="grid"
+                drumImageScale={samplerImageScale}
+                drumKeyOpacity={samplerKeyOpacity}
+                pads={drumConfig.pads}
+                activeKeyIds={activeKeyIds}
+                onMouseDownKey={handleKeyMouseDown}
+                onMouseEnterKey={handleKeyMouseEnter}
+                getCharForPadId={drumConfig.getCharForPadId}
+                showCustomize={showDrumCustomize}
+                onToggleCustomize={() => setShowDrumCustomize((v) => !v)}
             />
-          </>
+            </>
         ) : (
-          <PianoKeyboard
+            <PianoKeyboard
             waveform={waveform}
             setWaveform={setWaveform}
             activeKeyIds={activeKeyIds}
             onMouseDownKey={handleKeyMouseDown}
             onMouseEnterKey={handleKeyMouseEnter}
-          />
+            />
         )}
-      </div>
+        </div>
 
-      {(isDrums || isSampler) && (
+        {(isDrums || isSampler) && (
         <DrumPadCustomizer
-          isOpen={showDrumCustomize}
-          onClose={() => setShowDrumCustomize(false)}
-          drumConfig={drumConfig}
+            isOpen={showDrumCustomize}
+            onClose={() => setShowDrumCustomize(false)}
+            drumConfig={drumConfig}
 
-          drumImageScale={isDrums ? drumImageScale : samplerImageScale}
-          setDrumImageScale={isDrums ? setDrumImageScale : setSamplerImageScale}
+            drumImageScale={isDrums ? drumImageScale : samplerImageScale}
+            setDrumImageScale={isDrums ? setDrumImageScale : setSamplerImageScale}
 
-          drumKeyOpacity={isDrums ? drumKeyOpacity : samplerKeyOpacity}
-          setDrumKeyOpacity={isDrums ? setDrumKeyOpacity : setSamplerKeyOpacity}
+            drumKeyOpacity={isDrums ? drumKeyOpacity : samplerKeyOpacity}
+            setDrumKeyOpacity={isDrums ? setDrumKeyOpacity : setSamplerKeyOpacity}
 
-          onResetLayout={isDrums ? resetDrumLayout : resetSamplerLayout}
+            onResetLayout={isDrums ? resetDrumLayout : resetSamplerLayout}
         />
-      )}
+        )}
 
-      <AppModal
+        <AppModal
         isOpen={!!recordGuard}
         title="Recording blocked"
         onClose={() => {
-          if (deleteClipsOnDismiss) deleteClipsToRightOfHead?.();
-          setDeleteClipsOnDismiss(false);
-          clearRecordGuard?.();
+            if (deleteClipsOnDismiss) deleteClipsToRightOfHead?.();
+            setDeleteClipsOnDismiss(false);
+            clearRecordGuard?.();
         }}
         onEnter={() => {
-          if (deleteClipsOnDismiss) deleteClipsToRightOfHead?.();
-          setDeleteClipsOnDismiss(false);
-          clearRecordGuard?.();
+            if (deleteClipsOnDismiss) deleteClipsToRightOfHead?.();
+            setDeleteClipsOnDismiss(false);
+            clearRecordGuard?.();
         }}
-      >
+        >
         {recordGuard?.mode === "room" ? (
-          <>
+            <>
             <p className="appModal__small">
-              Room recording is blocked. Some users have record-armed tracks that need clearing.
+                Room recording is blocked. Some users have record-armed tracks that need clearing.
             </p>
 
             <div style={{ marginTop: 10 }}>
-              {(recordGuard?.offenders || []).map((o) => (
+                {(recordGuard?.offenders || []).map((o) => (
                 <div key={o.username} className="appModal__small" style={{ marginBottom: 6 }}>
-                  <strong>{o.username}</strong>:{" "}
-                  {`${o.tracksNeedingClear} track${o.tracksNeedingClear === 1 ? "" : "s"} (${o.clipCount} clip${
+                    <strong>{o.username}</strong>:{" "}
+                    {`${o.tracksNeedingClear} track${o.tracksNeedingClear === 1 ? "" : "s"} (${o.clipCount} clip${
                     o.clipCount === 1 ? "" : "s"
-                  })`}
+                    })`}
                 </div>
-              ))}
+                ))}
             </div>
 
             <p className="appModal__small" style={{ marginTop: 10 }}>
-              You can only delete <strong>your</strong> clips. Other users must clear theirs on their own.
+                You can only delete <strong>your</strong> clips. Other users must clear theirs on their own.
             </p>
-          </>
+            </>
         ) : recordGuard?.mode === "ready" ? (
-          <p className="appModal__small">make sure all users are ready</p>
+            <p className="appModal__small">make sure all users are ready</p>
         ) : (
-          <p className="appModal__small">
+            <p className="appModal__small">
             You have {recordGuard?.clipCount || 0} clip{(recordGuard?.clipCount || 0) === 1 ? "" : "s"} to
             the right of the tape-head. Recording is disabled to prevent overwriting existing audio.
-          </p>
+            </p>
         )}
 
 
-      {recordGuard?.mode === "room" ? (
+        {recordGuard?.mode === "room" ? (
         (recordGuard?.offenders || []).some((o) => o.username === username) ? (
-          <label className="appModal__checkboxRow">
+            <label className="appModal__checkboxRow">
             <input
-              type="checkbox"
-              checked={deleteClipsOnDismiss}
-              onChange={(e) => setDeleteClipsOnDismiss(e.target.checked)}
+                type="checkbox"
+                checked={deleteClipsOnDismiss}
+                onChange={(e) => setDeleteClipsOnDismiss(e.target.checked)}
             />
             <span className="appModal__small">
-              Delete clips to the right of the tape-head when closing this popup
+                Delete clips to the right of the tape-head when closing this popup
             </span>
-          </label>
+            </label>
         ) : null
-      ) : recordGuard?.mode !== "ready" ? (
+        ) : recordGuard?.mode !== "ready" ? (
         <label className="appModal__checkboxRow">
-          <input
+            <input
             type="checkbox"
             checked={deleteClipsOnDismiss}
             onChange={(e) => setDeleteClipsOnDismiss(e.target.checked)}
-          />
-          <span className="appModal__small">
+            />
+            <span className="appModal__small">
             Delete clips to the right of the tape-head when closing this popup
-          </span>
+            </span>
         </label>
-      ) : null}
+        ) : null}
 
         <div className="appModal__footer" style={{ padding: 0, marginTop: "0.9rem" }}>
-          <button
+            <button
             type="button"
             className="appModal__btn"
             onClick={() => {
-              if (deleteClipsOnDismiss) deleteClipsToRightOfHead?.();
-              setDeleteClipsOnDismiss(false);
-              clearRecordGuard?.();
+                if (deleteClipsOnDismiss) deleteClipsToRightOfHead?.();
+                setDeleteClipsOnDismiss(false);
+                clearRecordGuard?.();
             }}
-          >
+            >
             Close
-          </button>
+            </button>
         </div>
-      </AppModal>
+        </AppModal>
 
-      {/* Modals */}
-      <TrackFxModal
+        {/* Modals */}
+        <TrackFxModal
         isOpen={fxModalTrackId != null}
         onClose={closeFxModal}
         trackName={fxTrack?.name}
         effects={fxTrack?.effects || []}
         onChangeEffects={(next) => {
-          if (fxModalTrackId == null) return;
-          setTrackEffects?.(fxModalTrackId, next);
+            if (fxModalTrackId == null) return;
+            setTrackEffects?.(fxModalTrackId, next);
         }}
-      />
-      {/* Input modal */}
-      {isInputModalOpen && (
+        />
+        {/* Input modal */}
+        {isInputModalOpen && (
         <div className="fxModal__overlay" onMouseDown={closeInputModal}>
-          <div className="fxModal__panel" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="fxModal__panel" onMouseDown={(e) => e.stopPropagation()}>
             <div className="fxModal__header">
-              <div className="fxModal__title">Interface (This Track)</div>
-              <button className="btn" onClick={closeInputModal} type="button">
+                <div className="fxModal__title">Interface (This Track)</div>
+                <button className="btn" onClick={closeInputModal} type="button">
                 Close
-              </button>
+                </button>
             </div>
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <label style={{ minWidth: 80 }}>Device</label>
-              <select
+                <label style={{ minWidth: 80 }}>Device</label>
+                <select
                 value={selectedInputDeviceId}
                 onChange={(e) => setSelectedInputDeviceId(e.target.value)}
-              >
+                >
                 <option value="">(Disconnected)</option>
                 {audioInputs.map((d) => (
-                  <option key={d.deviceId} value={d.deviceId}>
+                    <option key={d.deviceId} value={d.deviceId}>
                     {d.label || `Input ${d.deviceId.slice(0, 6)}...`}
-                  </option>
+                    </option>
                 ))}
-              </select>
-              <button className="btn btn-primary" onClick={applyInterfaceDevice} type="button">
+                </select>
+                <button className="btn btn-primary" onClick={applyInterfaceDevice} type="button">
                 Apply
-              </button>
+                </button>
 
             </div>
             <p style={{ marginTop: 10, opacity: 0.85 }}>
-              Once connected, you should hear the selected input routed through the selected track&apos;s effects.
+                Once connected, you should hear the selected input routed through the selected track&apos;s effects.
             </p>
-          </div>
+            </div>
         </div>
-      )}
+        )}
 
 
-      {/* Room modal */}
-      <RoomModal
+        {/* Room modal */}
+        <RoomModal
         isOpen={isRoomModalOpen}
         onClose={closeRoomModal}
         roomStatus={roomStatus}
@@ -623,8 +623,8 @@ export default function InstrumentPage({ instrument }) {
         username={username}
         connectToRoom={connectToRoom}
         disconnectRoom={disconnectRoom}
-      />
-      
+        />
+      </div>
       </main>
     </div>
   );

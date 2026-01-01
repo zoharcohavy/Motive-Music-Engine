@@ -3,9 +3,12 @@
     "",
     "\\my-app",
     "\\my-app\\src",
+    "\\my-app\\src\\components",
+    "\\my-app\\src\\components\\audio",
+    "\\my-app\\src\\components\\audio\\SoundBoards",
     "\\my-app\\src\\pages",
     "\\server"
   ],
-  "SelectedNode": "\\my-app\\src\\pages\\DrumPage.jsx",
+  "SelectedNode": "\\my-app\\src\\components\\audio\\useRecording.js",
   "PreviewInSolutionExplorer": false
 }
