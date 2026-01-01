@@ -89,7 +89,7 @@ export default function RoomModal({
               type="text"
               value={usernameInput}
               onChange={(e) => setUsernameInput(e.target.value)}
-              placeholder="e.g. Zohar"
+              placeholder="e.g. user10"
               className="roomModal__input"
             />
           </label>
