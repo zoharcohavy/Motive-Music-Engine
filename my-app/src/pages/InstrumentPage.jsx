@@ -315,10 +315,6 @@ export default function InstrumentPage({ instrument }) {
               );
             })}
           </div>
-
-          <div className="instrumentMenu__hint">
-            Tip: swap these images later (see the imports at the top of this file).
-          </div>
         </aside>
       
       <main className="instrumentMain">
