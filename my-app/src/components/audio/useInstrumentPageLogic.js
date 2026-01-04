@@ -19,6 +19,10 @@ export function useInstrumentPageLogic() {
   // We need a ref so the room callback can call audioEngine.playRemoteNote
   const audioEngineRef = useRef(null);
 
+  // NEW: make transport controls available to callbacks created before trackModel
+  const transportPlayRef = useRef(null);
+  const transportPlayingRef = useRef(false);
+
   // Always-available “bridge” so audioEngine can send WS messages even though room is created first
   const sendRoomMessageRef = useRef(null);
 
@@ -50,8 +54,15 @@ export function useInstrumentPageLogic() {
     onRoomRecordStart: (sessionFolder) => {
       const uiBlockedNow = Boolean(recordGuard) || Boolean(room.isRoomModalOpen);
       if (uiBlockedNow) return;
+
       recordingRef.current?.startRoomArmedTracks(sessionFolder, usernameRef.current);
+
+      // NEW: auto-start transport so Play flips to Pause while room recording
+      if (!transportPlayingRef.current && typeof transportPlayRef.current === "function") {
+          transportPlayRef.current();
+      }
     },
+
 
 
     onRoomRecordStop: (sessionFolder) => {
@@ -102,6 +113,13 @@ export function useInstrumentPageLogic() {
   };
 
   const trackModel = useTrackModel({ playClipUrl });
+
+  // Keep transport helpers in refs so callbacks defined above can trigger Play
+  transportPlayRef.current = trackModel.handleGlobalPlay;
+  useEffect(() => {
+      transportPlayingRef.current = !!trackModel.isTransportPlaying;
+  }, [trackModel.isTransportPlaying]);
+
   
   // Aliases for recording-guard helpers (so we can use simple names below)
   const { tracks, setTracks, headTimeSeconds } = trackModel;
@@ -208,6 +226,10 @@ export function useInstrumentPageLogic() {
     // Only block when STARTING (not when STOPPING)
     if (!currentlyRecording) {
       if (checkAndBlockRecordingIfNeeded()) return;
+      // NEW: when starting a fresh recording, auto-start transport
+      if (!transportPlayingRef.current && typeof transportPlayRef.current === "function") {
+          transportPlayRef.current();
+      }
     }
 
     recording?.toggleGlobalRecord?.();
@@ -293,6 +315,42 @@ export function useInstrumentPageLogic() {
     room.toggleRoomRecord?.();
   };
 
+    // Play button behavior:
+    // - If any recording is active (global or room), treat a click as:
+    //   1) stop the active recording(s)
+    //   2) pause the transport so the button flips back to Play
+    // - Otherwise, just toggle transport play/pause normally.
+    const handlePlayButtonClick = () => {
+        const isGlobalRec = Boolean(recording?.isGlobalRecording);
+        const isRoomRec = Boolean(room?.roomIsRecording);
+
+        const anyRecording = isGlobalRec || isRoomRec;
+
+        if (anyRecording) {
+            // Stop whichever recording mode is active.
+            if (isGlobalRec) {
+                // Use the guarded wrapper so we keep any future logic consistent.
+                requestToggleGlobalRecord();
+            }
+
+            if (isRoomRec) {
+                // Mirror the behavior of the room record button in TopControls.
+                requestToggleRoomRecord();
+            }
+
+            // Then pause transport if it is currently playing.
+            if (trackModel?.isTransportPlaying && typeof trackModel?.handleGlobalPlay === "function") {
+                trackModel.handleGlobalPlay();
+            }
+
+            return;
+        }
+
+        // Normal play/pause toggle when nothing is recording.
+        trackModel?.handleGlobalPlay?.();
+    };
+
+
 
 
   // Keep audio routing in sync with track mute/solo and live inputs
@@ -335,7 +393,9 @@ export function useInstrumentPageLogic() {
   });
   recordingRef.current = recording;
 
-  
+  // NEW: Treat any active recording as a UI lock
+    const isRecordingLocked = room.isRoomLocked || recording.isGlobalRecording;
+
   // --- Keyboard handlers for the PianoKeyboard component ---
   const handleKeyMouseDown = (key) => {
     if (!key) return;
@@ -550,7 +610,7 @@ export function useInstrumentPageLogic() {
     setMouseMode: trackModel.setMouseMode,
     globalZoom: trackModel.globalZoom,
     changeZoom: trackModel.changeZoom,
-    handleGlobalPlay: trackModel.handleGlobalPlay,
+    handleGlobalPlay: handlePlayButtonClick,
     isTransportPlaying: trackModel.isTransportPlaying,
     mouse_interactions: trackModel.mouse_interactions,
     moveClip: trackModel.moveClip,
@@ -586,7 +646,7 @@ export function useInstrumentPageLogic() {
     deleteClipsToRightOfHead: deleteClipsToRightOfHead,
 
     roomRecordPhase: room.roomRecordPhase,
-    isRoomLocked: room.isRoomLocked,
+    isRoomLocked: isRecordingLocked,
     recordings: recording.recordings,
     recordingsError: recording.recordingsError,
     storageFiles: recording.storageFiles,

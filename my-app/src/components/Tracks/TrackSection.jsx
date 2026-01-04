@@ -207,16 +207,16 @@ export default function TrackSection({
       {/* Transport / zoom row */}
     <div className="trackSection__transportRow">
 
-  <button className="btn btn-primary trackSection__playBtn" onClick={() => revealThen(handleGlobalPlay)}>
-    {isTransportPlaying ? "⏸ Pause" : "▶ Play"}
-  </button>
-  <button
-    className={`btn trackSection__globalRecBtn ${isGlobalRecording ? "trackSection__globalRecBtn--active" : ""}`}
-    onClick={() => revealThen(onToggleGlobalRecord)}
-    type="button"
-  >
-    ● Rec
-  </button>
+      <button className="btn btn-primary trackSection__playBtn roomAllowedStop" onClick={() => revealThen(handleGlobalPlay)}>
+        {isTransportPlaying ? "⏸ Pause" : "▶ Play"}
+      </button>
+      <button
+                  className={`btn trackSection__globalRecBtn roomAllowedStop ${ isGlobalRecording ? "trackSection__globalRecBtn--active" : ""}`}
+        onClick={() => revealThen(onToggleGlobalRecord)}
+        type="button"
+      >
+        ● Rec
+      </button>
 
 <button className="btn trackSection__addTrackBtn" onClick={addTrack}>
     + Track

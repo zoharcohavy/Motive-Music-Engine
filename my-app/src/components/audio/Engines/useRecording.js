@@ -203,6 +203,47 @@ export function useRecording({
     return data;
   };
 
+    // Upload a single "local" recording so it also appears in the Recordings panel
+    const uploadGlobalTrackBlob = async ({ blob, trackId, trackName }) => {
+        try {
+            if (!blob) return;
+
+            const formData = new FormData();
+
+            const safeBase = (trackName || `Track${trackId ?? ""}`)
+                .toString()
+                .trim()
+                .replace(/[^\w.\-() ]+/g, "_")
+                .slice(0, 40) || "Track";
+
+            // Save as .webm; backend is already configured to accept .webm
+            formData.append("audio", blob, `${safeBase}.webm`);
+
+            // Empty roomSessionFolder = dump into root recordingsDir
+            formData.append("roomSessionFolder", "");
+            formData.append("username", "Local");
+
+            const res = await fetch(`${API_BASE}/api/recordings/upload`, {
+                method: "POST",
+                body: formData,
+            });
+
+            if (!res.ok) {
+                console.warn(
+                    "uploadGlobalTrackBlob: upload failed with status",
+                    res.status
+                );
+                return;
+            }
+
+            // Refresh the list so the new file shows up in RecordingsPanel
+            fetchRecordings().catch(() => { });
+        } catch (e) {
+            console.error("uploadGlobalTrackBlob error:", e);
+        }
+    };
+
+
   useEffect(() => {
     fetchRecordings();
     fetchStorage();
@@ -440,7 +481,16 @@ export function useRecording({
 
             return { ...trk, clips: [...withoutTemp, newClip] };
           })
-        );
+          );
+        try {
+            await uploadGlobalTrackBlob({
+                blob,
+                trackId: t.id,
+                trackName: t.name,
+            });
+        } catch {
+            // Helper already logs its own errors
+        }
       };
 
       try {
