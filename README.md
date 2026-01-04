@@ -63,8 +63,8 @@ node -v
 npm -v
 
 2. Clone the Repository
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
-cd YOUR_REPO_NAME
+git clone https://github.com/zoharcohavy/Motive-Music-Engine
+cd Motive-Music-Engine
 
 3. Install Dependencies
 Backend
