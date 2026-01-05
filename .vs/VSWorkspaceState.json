@@ -3,12 +3,9 @@
     "",
     "\\my-app",
     "\\my-app\\src",
-    "\\my-app\\src\\components",
-    "\\my-app\\src\\components\\audio",
-    "\\my-app\\src\\components\\audio\\SoundBoards",
-    "\\my-app\\src\\pages",
+    "\\my-app\\src\\styles",
     "\\server"
   ],
-  "SelectedNode": "\\my-app\\src\\components\\audio\\useRecording.js",
+  "SelectedNode": "\\my-app\\.gitignore",
   "PreviewInSolutionExplorer": false
 }
