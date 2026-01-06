@@ -8,3 +8,6 @@ server/node_modules/
 __MACOSX/
 server/recordings/
 server/storage/
+# env
+server/.env
+.env
