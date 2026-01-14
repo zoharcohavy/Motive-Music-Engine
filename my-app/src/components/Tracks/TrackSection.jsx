@@ -58,6 +58,10 @@ export default function TrackSection({
   isTransportPlaying,
   addTrack,
   deleteTrack,
+  trackCountLock,
+  isPortastudioMode = false,
+  onChangeInstrumentType,
+  onOpenTapeFx,
   renameTrack,
   setTrackHeightPx,
 
@@ -218,9 +222,11 @@ export default function TrackSection({
         ● Rec
       </button>
 
-<button className="btn trackSection__addTrackBtn" onClick={addTrack}>
-    + Track
-  </button>
+{!(typeof trackCountLock === "number" && trackCountLock === 4) && !isPortastudioMode && (
+        <button className="btn trackSection__addTrackBtn" onClick={addTrack}>
+          + Track
+        </button>
+      )}
 
   <div className="trackSection__zoomGroup">
 
@@ -339,6 +345,21 @@ export default function TrackSection({
                 </button>
               )}
 
+              {isPortastudioMode && (
+                <div className="trackSection__instrumentRow">
+                  <label className="trackSection__instrumentLabel">Instrument</label>
+                  <select
+                    className="trackSection__instrumentSelect"
+                    value={(track.instrumentType || "guitar").toLowerCase()}
+                    onChange={(e) => onChangeInstrumentType?.(track.id, e.target.value)}
+                  >
+                    <option value="guitar">Guitar</option>
+                    <option value="bass">Bass</option>
+                    <option value="drums">Drums</option>
+                  </select>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => toggleTrackRecEnabled?.(track.id)}
@@ -379,14 +400,26 @@ export default function TrackSection({
               >
                 +Audio
               </button>
-              <button
-                type="button"
-                className="btn trackSection__deleteBtn"
-                onClick={() => deleteTrack(track.id)}
-                title="Delete track"
-              >
-                ✕
-              </button>
+                {isPortastudioMode ? (
+                    <button
+                        type="button"
+                        className="btn trackSection__tapeFxBtn"
+                        onClick={() => onOpenTapeFx?.(track.id)}
+                        title="Portastudio Tape FX"
+                    >
+                        +TapeFX
+                    </button>
+                ) : (
+                    <button
+                        type="button"
+                        className="btn trackSection__deleteBtn"
+                        onClick={() => deleteTrack(track.id)}
+                        title="Delete track"
+                    >
+                        ✕
+                    </button>
+                )}
+
               <button
                 type="button"
                 className="btn trackSection__fxBtn"

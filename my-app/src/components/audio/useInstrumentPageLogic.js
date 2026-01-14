@@ -357,6 +357,11 @@ export function useInstrumentPageLogic() {
   useEffect(() => {
     audioEngine.syncTrackBuses(trackModel.tracks);
 
+    // Sync Portastudio-style tape FX params per track
+    (trackModel.tracks || []).forEach((t) => {
+      if (t?.tapeFx) audioEngine.setTrackTapeFx?.(t.id, t.tapeFx);
+    });
+
     // Update live inputs (device + FX) for any tracks that have an input selected
     (trackModel.tracks || []).forEach((t) => {
       if (t.inputDeviceId) {
@@ -618,6 +623,11 @@ export function useInstrumentPageLogic() {
     // ===== Tracks =====
     tracks: trackModel.tracks,
     setTrackEffects: trackModel.setTrackEffects,
+    setTrackInstrumentType: trackModel.setTrackInstrumentType,
+    setTrackTapeFx: trackModel.setTrackTapeFx,
+    resetTracks: trackModel.resetTracks,
+    trackCountLock: trackModel.trackCountLock,
+    setTrackCountLock: trackModel.setTrackCountLock,
     toggleTrackRecEnabled: trackModel.toggleTrackRecEnabled,
     toggleTrackMuted: trackModel.toggleTrackMuted,
     toggleTrackSolo: trackModel.toggleTrackSolo,

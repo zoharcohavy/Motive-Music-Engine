@@ -35,6 +35,9 @@ export function useTrackModel(options = {}) {
       tapeHeadPos: 0,
       recordingImage: null,
       clipStartPos: 0,
+          instrumentType: "guitar",
+      tapeFx: { saturation: 0, wowFlutter: 0, eqRollOff: 0, hiss: 0 },
+      heightPx: 84,
     },
   ]);
 
@@ -45,6 +48,7 @@ export function useTrackModel(options = {}) {
   const MAX_TRACK_HEIGHT_PX = 220;
 
   const [nextTrackId, setNextTrackId] = useState(1);
+  const [trackCountLock, setTrackCountLock] = useState(null); // null = unlocked, number = fixed count
   const [globalZoom, setGlobalZoom] = useState(1);
   const [viewStartTime, setViewStartTime] = useState(0); // left edge in seconds
   const [headTimeSeconds, setHeadTimeSeconds] = useState(0); // absolute playhead time in seconds
@@ -120,8 +124,14 @@ export function useTrackModel(options = {}) {
 
   const addTrack = () => {
     const id = nextTrackId;
-    setTracks((prev) => [
-      ...prev,
+    setTracks((prev) => {
+      const lock = trackCountLock;
+      if (typeof lock === "number" && Array.isArray(prev) && prev.length >= lock) {
+        window.alert(`This session is locked to ${lock} tracks.`);
+        return prev;
+      }
+      return [
+        ...prev,
       {
         id: nextTrackId,
         name: String(id),
@@ -140,10 +150,53 @@ export function useTrackModel(options = {}) {
         recordingImage: null,
         clipStartPos: 0,
         heightPx: DEFAULT_TRACK_HEIGHT_PX,
+              instrumentType: "guitar",
+        tapeFx: { saturation: 0, wowFlutter: 0.0, eqRollOff: 0, hiss: 0 },
       },
-    ]);
+    ];
+    });
     setNextTrackId((id) => id + 1);
   };
+
+    // Reset tracks in one shot (used by Portastudio mode)
+    const resetTracks = (nextTracksArray, lockCount = null) => {
+        const arr = Array.isArray(nextTracksArray) ? nextTracksArray : [];
+        setTracks(arr);
+
+        // Keep ids consistent for future addTrack calls
+        const maxId = arr.reduce((m, t) => {
+            const id = typeof t?.id === "number" ? t.id : -1;
+            return Math.max(m, id);
+        }, -1);
+        setNextTrackId(maxId + 1);
+
+        // Lock/unlock track count (Portastudio mode uses 4)
+        if (typeof lockCount === "number") setTrackCountLock(lockCount);
+        else setTrackCountLock(null);
+
+        // Reset view/selection to something safe
+        setSelectedTrackId(arr[0]?.id ?? null);
+        setActiveRecordingTrackId(null);
+        setViewStartTime(0);
+        setHeadTimeSeconds(0);
+    };
+
+    const setTrackInstrumentType = (trackId, instrumentType) => {
+        setTracks((prev) =>
+            prev.map((t) => (t.id === trackId ? { ...t, instrumentType } : t))
+        );
+    };
+
+    const setTrackTapeFx = (trackId, tapeFxPatch) => {
+        setTracks((prev) =>
+            prev.map((t) =>
+                t.id === trackId
+                    ? { ...t, tapeFx: { ...(t.tapeFx || {}), ...(tapeFxPatch || {}) } }
+                    : t
+            )
+        );
+    };
+
 
   const toggleTrackMuted = (trackId) => {
     setTracks((prev) =>
@@ -923,6 +976,13 @@ if (track.clips && track.clips.length > 0) {
 
     const deleteTrack = (trackId) => {
       setTracks((prev) => {
+        // Don't allow deleting tracks when locked to a fixed count.
+        const lock = trackCountLock;
+        if (typeof lock === "number" && Array.isArray(prev) && prev.length <= lock) {
+          window.alert(`This session is locked to ${lock} tracks.`);
+          return prev;
+        }
+
         // Don't allow deleting the last remaining track.
         if (!Array.isArray(prev) || prev.length <= 1) {
           window.alert("You can't delete the last track. Add another track first.");
@@ -969,6 +1029,8 @@ if (track.clips && track.clips.length > 0) {
     setTracks,
     nextTrackId,
     setNextTrackId,
+    trackCountLock,
+    setTrackCountLock,
     viewStartTime,
     setViewStartTime,
     headTimeSeconds,
@@ -995,6 +1057,9 @@ if (track.clips && track.clips.length > 0) {
     // actions
     addTrack,
     deleteTrack,
+    resetTracks,
+    setTrackInstrumentType,
+    setTrackTapeFx,
     renameTrack,
     setTrackHeightPx,
     setTrackEffects,

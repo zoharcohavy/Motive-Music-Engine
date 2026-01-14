@@ -3,9 +3,8 @@
     "",
     "\\my-app",
     "\\my-app\\src",
-    "\\my-app\\src\\styles",
     "\\server"
   ],
-  "SelectedNode": "\\my-app\\.gitignore",
+  "SelectedNode": "\\server\\models",
   "PreviewInSolutionExplorer": false
 }

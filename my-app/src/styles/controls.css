@@ -275,9 +275,6 @@
 /* Ribbon attached to bottom-right of mouse mode grid */
 .liveWaveRibbon {
   position: absolute;
-
-  /* bottom-right of the mouse-mode card */
-  right: 10px;
   top: calc(100% - 1px); /* slight overlap so it feels attached */
 
   height: 16px; /* shorter */
@@ -322,6 +319,15 @@
 
 .liveWaveRibbon.active .liveWaveRibbon__text {
   color: rgba(255, 255, 255, 0.95);
+}
+.liveWaveRibbon--left {
+    left: 10px;
+    right: auto;
+}
+
+.liveWaveRibbon--right {
+    right: 10px;
+    left: auto;
 }
 
 /* Live waveform monitor docks to the right (overlay) so opening it doesn't shift layout */

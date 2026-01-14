@@ -6,6 +6,7 @@ import MouseModeToggle from "../components/Controls/MouseModeToggle";
 import TrackSection from "../components/Tracks/TrackSection";
 import RoomModal from "../components/Rooms/RoomModal";
 import TrackFxModal from "../components/Controls/TrackFxModal";
+import TapeFxModal from "../components/Controls/TapeFxModal";
 import { getDefaultDrumAnchors } from "../components/audio/SoundBoards/DrumLayoutDefaults";
 import PianoKeyboard from "../components/audio/SoundBoards/PianoKeyboard";
 import DrumMachine from "../components/audio/SoundBoards/DrumMachine";
@@ -42,6 +43,11 @@ export default function InstrumentPage({ instrument }) {
 
     tracks,
     setTrackEffects,
+    setTrackInstrumentType,
+    setTrackTapeFx,
+    resetTracks,
+    trackCountLock,
+    setTrackCountLock,
     viewStartTime,
     setViewStartTime,
     headTimeSeconds,
@@ -170,6 +176,15 @@ export default function InstrumentPage({ instrument }) {
 
   const [showDrumCustomize, setShowDrumCustomize] = useState(false);
   const [fxModalTrackId, setFxModalTrackId] = useState(null);
+  const [tapeFxModalTrackId, setTapeFxModalTrackId] = useState(null);
+
+  const [sessionTemplate, setSessionTemplate] = usePersistedState(
+    "mme_session_template",
+    "free"
+  );
+  const togglePortastudioMode = () => {
+    setSessionTemplate((prev) => (prev === "portastudio" ? "free" : "portastudio"));
+  };
 
 
     // Load once on mount (also triggers permission request so labels populate)
@@ -195,13 +210,54 @@ export default function InstrumentPage({ instrument }) {
   const openFxForTrack = (trackId) => setFxModalTrackId(trackId);
   const closeFxModal = () => setFxModalTrackId(null);
 
+  const openTapeFxForTrack = (trackId) => setTapeFxModalTrackId(trackId);
+  const closeTapeFxModal = () => setTapeFxModalTrackId(null);
 
+  const isPortastudioMode = sessionTemplate === "portastudio";
+
+  const makePortastudioTracks = () => {
+    const base = {
+      zoom: 1,
+      headPos: 0,
+      clips: [],
+      effects: [],
+      isMuted: false,
+      isSolo: false,
+      isRecEnabled: false,
+      inputDeviceId: null,
+      hasRecording: false,
+      recordingUrl: null,
+      recordingDuration: 0,
+      tapeHeadPos: 0,
+      recordingImage: null,
+      clipStartPos: 0,
+      heightPx: DEFAULT_TRACK_HEIGHT_PX,
+      tapeFx: { saturation: 0, wowFlutter: 0, eqRollOff: 0, hiss: 0 },
+    };
+
+    const types = ["guitar", "bass", "drums", "guitar"];
+
+    return types.map((instrumentType, i) => ({
+      ...base,
+      id: i,
+      name: String(i + 1),
+      instrumentType,
+    }));
+  };
+
+  // Apply template behavior
   useEffect(() => {
-    if (!(isDrums || isSampler)) setShowDrumCustomize(false);
-  }, [isDrums, isSampler]);
+    if (sessionTemplate === "portastudio") {
+      const next = makePortastudioTracks();
+      resetTracks?.(next, 4);
 
+    } else {
+      // leaving portastudio: unlock (keep current tracks)
+      if (typeof trackCountLock === "number") setTrackCountLock?.(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionTemplate]);
 
-// Hide advanced panels by default, but remember the user's choice.
   const [isLiveWaveformOn, setIsLiveWaveformOn] = usePersistedState(
     "ui.instrumentPage.liveWaveformOn",
     false
@@ -338,7 +394,7 @@ export default function InstrumentPage({ instrument }) {
             {/* Live waveform ribbon */}
             <button
             type="button"
-            className={`liveWaveRibbon ${isLiveWaveformOn ? "active" : ""}`}
+            className={`liveWaveRibbon liveWaveRibbon--left ${isLiveWaveformOn ? "active" : ""}`}
             onClick={() => setIsLiveWaveformOn((v) => !v)}
             aria-pressed={isLiveWaveformOn}
             title="Live waveform"
@@ -351,6 +407,24 @@ export default function InstrumentPage({ instrument }) {
             />
             <span className="liveWaveRibbon__text">Live</span>
             </button>
+
+
+            <button
+                type="button"
+                className={`liveWaveRibbon liveWaveRibbon--right ${isPortastudioMode ? "active" : ""}`}
+                onClick={togglePortastudioMode}
+                aria-pressed={isPortastudioMode}
+                title="Portastudio 4-Track mode (locks to 4 tracks)"
+            >
+                <img
+                    src={SineWaveIcon}
+                    alt=""
+                    draggable={false}
+                    className="liveWaveRibbon__icon"
+                />
+                <span className="liveWaveRibbon__text">4Track</span>
+            </button>
+
 
             {isLiveWaveformOn && (
             <div className="card liveWaveCard liveWaveCard--docked">
@@ -375,7 +449,6 @@ export default function InstrumentPage({ instrument }) {
         />
         </div>
 
-
         {/* Tracks */}
         <TrackSection
         tracks={tracks}
@@ -390,6 +463,10 @@ export default function InstrumentPage({ instrument }) {
         isTransportPlaying={isTransportPlaying}
         addTrack={addTrack}
         deleteTrack={deleteTrack}
+        trackCountLock={trackCountLock}
+        isPortastudioMode={isPortastudioMode}
+        onChangeInstrumentType={setTrackInstrumentType}
+        onOpenTapeFx={openTapeFxForTrack}
         renameTrack={renameTrack}
         setTrackHeightPx={setTrackHeightPx}
 
@@ -564,7 +641,18 @@ export default function InstrumentPage({ instrument }) {
         </AppModal>
 
         {/* Modals */}
-        <TrackFxModal
+        <TapeFxModal
+        isOpen={tapeFxModalTrackId != null}
+        onClose={closeTapeFxModal}
+        trackName={(tracks || []).find((t) => t.id === tapeFxModalTrackId)?.name || "Track"}
+        tapeFx={(tracks || []).find((t) => t.id === tapeFxModalTrackId)?.tapeFx}
+        onChangeTapeFx={(next) => {
+          if (tapeFxModalTrackId == null) return;
+          setTrackTapeFx?.(tapeFxModalTrackId, next);
+        }}
+      />
+
+      <TrackFxModal
         isOpen={fxModalTrackId != null}
         onClose={closeFxModal}
         trackName={fxTrack?.name}
