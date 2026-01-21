@@ -114,6 +114,13 @@ export function useInstrumentPageLogic() {
 
   const trackModel = useTrackModel({ playClipUrl });
 
+  // Keep a stable ref of tracks so we can apply tape FX instantly while dragging sliders
+  const tracksRef = useRef(trackModel.tracks);
+  useEffect(() => {
+    tracksRef.current = trackModel.tracks;
+  }, [trackModel.tracks]);
+
+
   // Keep transport helpers in refs so callbacks defined above can trigger Play
   transportPlayRef.current = trackModel.handleGlobalPlay;
   useEffect(() => {
@@ -598,6 +605,19 @@ export function useInstrumentPageLogic() {
   // for the visual piano component. The actual keyboard events can still
   // be wired up in the React component using KEYS + getKeyIndexForKeyboardChar
   // if needed.
+  // Apply tape FX immediately (so TapeFxModal slider drags are audible in real time)
+  const setTrackTapeFxImmediate = (trackId, nextTapeFx) => {
+    // 1) Update React state (UI)
+    trackModel.setTrackTapeFx(trackId, nextTapeFx);
+
+    // 2) Update WebAudio immediately (audible right away)
+    const current =
+      (tracksRef.current || []).find((t) => t.id === trackId)?.tapeFx || {};
+
+    const merged = { ...current, ...(nextTapeFx || {}) };
+
+    audioEngine.setTrackTapeFx?.(trackId, merged);
+  };
 
   return {
     // ===== Audio engine / piano =====
@@ -624,7 +644,7 @@ export function useInstrumentPageLogic() {
     tracks: trackModel.tracks,
     setTrackEffects: trackModel.setTrackEffects,
     setTrackInstrumentType: trackModel.setTrackInstrumentType,
-    setTrackTapeFx: trackModel.setTrackTapeFx,
+    setTrackTapeFx: setTrackTapeFxImmediate,
     resetTracks: trackModel.resetTracks,
     trackCountLock: trackModel.trackCountLock,
     setTrackCountLock: trackModel.setTrackCountLock,

@@ -267,16 +267,54 @@ export function useTransport({
 
               if (typeof playClipUrl === "function") {
                 // WebAudio handle (supports FX)
+                // IMPORTANT: playClipUrl is async (mp3 decode/load). Without a placeholder,
+                // the transport loop can trigger this multiple times before the promise resolves,
+                // causing layered "delay/echo" that keeps building. Also, pause can happen before
+                // resolve, so we must support cancellation.
+
+                let cancelled = false;
+                let resolvedHandle = null;
+
+                // Put a placeholder in the map immediately so we don't re-trigger next frame.
+                const pendingHandle = {
+                  stop: () => {
+                    cancelled = true;
+                    try {
+                      resolvedHandle?.stop?.();
+                    } catch (e) {
+                      // ignore
+                    }
+                  },
+                };
+
+                activeMap.set(key, pendingHandle);
+
                 Promise.resolve(
                   playClipUrl(clip.url, {
                     offsetSeconds: desiredTime,
-                    effectsOverride: track.effects || [],
-                    gain: 1,
                     trackId: track.id,
                   })
                 ).then((handle) => {
+                  // If we paused/stopped or the clip is no longer active by the time it loads,
+                  // immediately stop it and don't register it.
+                  if (cancelled || !isTransportPlayingRef.current || !shouldBeActive.has(key)) {
+                    try {
+                      handle?.stop?.();
+                    } catch (e) {
+                      // ignore
+                    }
+                    // Ensure placeholder is removed if still present
+                    if (activeMap.get(key) === pendingHandle) activeMap.delete(key);
+                    return;
+                  }
+
+                  resolvedHandle = handle;
+
+                  // Swap placeholder with the real handle
                   if (handle) activeMap.set(key, handle);
+                  else activeMap.delete(key);
                 });
+
               } else {
                 // Fallback: HTMLAudio (no FX)
                 const audio = new Audio(clip.url);
