@@ -230,18 +230,28 @@ export function useInstrumentPageLogic() {
   const requestToggleGlobalRecord = () => {
     const currentlyRecording = Boolean(recording?.isGlobalRecording);
 
-    // Only block when STARTING (not when STOPPING)
+    // START recording
     if (!currentlyRecording) {
       if (checkAndBlockRecordingIfNeeded()) return;
-      // NEW: when starting a fresh recording, auto-start transport
-      if (!transportPlayingRef.current && typeof transportPlayRef.current === "function") {
-          transportPlayRef.current();
+
+      // If transport isn't playing, start it
+      if (!trackModel.isTransportPlaying && typeof transportPlayRef.current === "function") {
+        transportPlayRef.current();
       }
+
+      recording?.toggleGlobalRecord?.();
+      return;
     }
 
+    // STOP recording
     recording?.toggleGlobalRecord?.();
-  };
 
+    // NEW: stop/pause transport too (tapehead should stop)
+    // Use trackModel state (more reliable than the ref alone)
+    if (trackModel.isTransportPlaying && typeof transportPlayRef.current === "function") {
+      transportPlayRef.current(); // toggle play -> pause
+    }
+  };
 
 
   const requestToggleRoomRecord = async () => {
@@ -345,8 +355,13 @@ export function useInstrumentPageLogic() {
                 requestToggleRoomRecord();
             }
 
-            // Then pause transport if it is currently playing.
-            if (trackModel?.isTransportPlaying && typeof trackModel?.handleGlobalPlay === "function") {
+            // Then pause transport if it is still playing.
+            // IMPORTANT: check the live ref, not the `isTransportPlaying` state — that state
+            // is captured once per render and stays stale for the rest of this synchronous
+            // click handler, even after requestToggleGlobalRecord() above already stopped the
+            // transport. Reading the stale `true` here caused a second toggle that restarted
+            // the transport right after it had just been stopped.
+            if (trackModel?.isTransportPlayingRef?.current && typeof trackModel?.handleGlobalPlay === "function") {
                 trackModel.handleGlobalPlay();
             }
 
