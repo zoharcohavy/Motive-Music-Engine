@@ -845,6 +845,7 @@ export function useAudioEngine(options = {}) {
 
     getOrCreateTrackBus,
     syncTrackBuses,
+    setTrackTapeFx,
     updateLiveInputForTrack,
     listAudioInputs,
   };
