@@ -68,7 +68,16 @@ export function useInstrumentPageLogic() {
 
     onRoomRecordStop: (sessionFolder) => {
       // SAFE + returns promise so UI stays “finalizing” until finished
-      return recordingRef.current?.stopRoomArmedTracks(sessionFolder);
+      const done = recordingRef.current?.stopRoomArmedTracks(sessionFolder);
+
+      // Pause the transport so the tapehead stops when the room recording
+      // ends — mirrors the solo-record behavior. Ref-based check avoids
+      // double-toggling if another path already paused it.
+      if (transportPlayingRef.current && typeof transportPlayRef.current === "function") {
+        transportPlayRef.current();
+      }
+
+      return done;
     },
     onPrecheckRequest: (msg) => precheckResponderRef.current?.(msg),
     onPrecheckResponse: (msg) => precheckCollectorRef.current?.(msg),
@@ -256,11 +265,21 @@ export function useInstrumentPageLogic() {
 
 
   const requestToggleRoomRecord = async () => {
-    // 1) Local block first (use existing popup behavior)
-    if (checkAndBlockRecordingIfNeeded()) return;
-
-    // 2) If not connected, just do nothing
+    // If not connected, just do nothing
     if (room.roomStatus !== "connected") return;
+
+    // STOPPING (recording active or countdown pending): send the toggle
+    // immediately. The precheck/record-guard below is a "can we START?"
+    // gate — running it here could block the stop entirely (e.g. armed
+    // tracks now have clips past the head from this very recording) and
+    // always added ~1s of lag before the recording actually stopped.
+    if (room.roomIsRecording || room.roomRecordPhase !== "idle") {
+      room.toggleRoomRecord?.();
+      return;
+    }
+
+    // STARTING: local block first (use existing popup behavior)
+    if (checkAndBlockRecordingIfNeeded()) return;
 
     // 3) Start a room-wide precheck
     const requestId =

@@ -14,6 +14,13 @@ export function useRoom({
   const roomSocketRef = useRef(null);
   const hasAutoRejoinedRef = useRef(false);
 
+  // Auto-reconnect bookkeeping: reconnect after unexpected socket drops
+  // (laptop sleep, network blips, backgrounded tabs) but never after an
+  // explicit user disconnect.
+  const manualCloseRef = useRef(false);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef(null);
+
   // Persisted: if user refreshes while in a room, they rejoin.
   // If they were NOT in a room, roomId stays null and nothing happens.
   const [roomSession, setRoomSession] = usePersistedState(ROOM_STORAGE_KEY, {
@@ -330,6 +337,13 @@ export function useRoom({
       const name = (nameInput || "").trim();
       if (!code || !name) return;
 
+      // A fresh connect always re-arms auto-reconnect
+      manualCloseRef.current = false;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+
       // Persist immediately so refresh will rejoin
       setRoomSession({ roomId: code, username: name });
 
@@ -363,6 +377,7 @@ export function useRoom({
 
       ws.onopen = () => {
         roomSocketRef.current = ws;
+        reconnectAttemptsRef.current = 0; // connection is healthy again
         setRoomStatus("connected");
         setIsRoomModalOpen(false);
 
@@ -386,16 +401,36 @@ export function useRoom({
       ws.onerror = (err) => console.error("WebSocket room error", err);
 
       ws.onclose = () => {
-        if (roomSocketRef.current === ws) {
-          roomSocketRef.current = null;
-        }
-        setRoomStatus("disconnected");
+        // Ignore closes from sockets we already replaced with a newer LIVE
+        // one — but a close from a connection attempt that never opened
+        // (roomSocketRef stays null) must still drive the retry loop.
+        if (roomSocketRef.current && roomSocketRef.current !== ws) return;
+        roomSocketRef.current = null;
+
         setRoomUsernames([]);
         // Do NOT clear persisted session here; refresh should still rejoin.
+
+        // Unexpected drop → auto-reconnect with backoff (1s, 2s, 4s… max 10s).
+        if (!manualCloseRef.current && code && name) {
+          setRoomStatus("connecting");
+          const attempt = reconnectAttemptsRef.current++;
+          const delay = Math.min(10000, 1000 * 2 ** Math.min(attempt, 4));
+          reconnectTimerRef.current = setTimeout(() => {
+            reconnectTimerRef.current = null;
+            connectToRoomRef.current?.(code, name);
+          }, delay);
+        } else {
+          setRoomStatus("disconnected");
+        }
       };
     },
     [handleRoomMessage, setRoomSession]
   );
+
+  // Stable self-reference so the reconnect timer always calls the latest
+  // connectToRoom without adding it to its own dependency array.
+  const connectToRoomRef = useRef(null);
+  connectToRoomRef.current = connectToRoom;
   const toggleRoomRecord = useCallback(() => {
     if (roomRecordPhase === "finalizing") return;
     if (roomStatus !== "connected") return;
@@ -407,6 +442,14 @@ export function useRoom({
   }, [sendRoomMessage, username, roomRecordPhase, roomStatus]);
 
   const disconnectRoom = useCallback(() => {
+    // Explicit user action: do NOT auto-reconnect after this close
+    manualCloseRef.current = true;
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    reconnectAttemptsRef.current = 0;
+
     // stop any countdown timers
     const t = countdownTimersRef.current;
     if (t?.showTimer) clearTimeout(t.showTimer);
@@ -460,6 +503,11 @@ export function useRoom({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
+      manualCloseRef.current = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       if (roomSocketRef.current) {
         try {
           roomSocketRef.current.close();
