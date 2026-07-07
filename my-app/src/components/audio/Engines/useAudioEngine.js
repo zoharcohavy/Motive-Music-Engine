@@ -666,14 +666,6 @@ export function useAudioEngine(options = {}) {
 
     const oscWaveform = waveformOverride || waveform;
 
-    // Back-compat: allow old string effect to come through
-    const fxChainRaw = effectsOverride ?? effects;
-    const fxChain = Array.isArray(fxChainRaw)
-      ? fxChainRaw
-      : fxChainRaw
-      ? [{ type: String(fxChainRaw) }]
-      : [];
-
     const oscillator = ctx.createOscillator();
     const gainNode = ctx.createGain();
 
@@ -681,60 +673,17 @@ export function useAudioEngine(options = {}) {
     oscillator.frequency.value = freq;
     gainNode.gain.value = 0.13;
 
-    // IMPORTANT: effects must see the full oscillator amplitude,
-    // otherwise ceiling clipping won't trigger.
-    let last = oscillator;
+    // IMPORTANT: effects must see the full oscillator amplitude (otherwise
+    // ceiling clipping won't trigger), so the FX chain sits between the
+    // oscillator and this note's gain stage.
+    const { limitedChain } = await connectThroughFx(
+      ctx,
+      oscillator,
+      effectsOverride ?? effects,
+      gainNode
+    );
 
-    const limitedChain = fxChain.slice(0, 5);
-
-
-    for (const fx of limitedChain) {
-      const type = fx?.type;
-      if (!type || type === "none") continue;
-
-      if (type === "overdrive") {
-        const od = await createOverdriveNode(ctx, fx);
-        last.connect(od);
-        last = od;
-        continue;
-      }
-
-      if (type === "reverb") {
-        // ConvolverNode reverb (safe + fast).
-        // Mix dry + wet so the note doesn’t disappear.
-        const convolver = createReverbNode(ctx, reverbCacheRef);
-
-        const wetGain = ctx.createGain();
-        wetGain.gain.value = 0.35;
-
-        const dryGain = ctx.createGain();
-        dryGain.gain.value = 1.0;
-
-        const sum = ctx.createGain(); // GainNode sums multiple inputs
-
-        // Dry path
-        last.connect(dryGain);
-        dryGain.connect(sum);
-
-        // Wet path
-        last.connect(convolver);
-        convolver.connect(wetGain);
-        wetGain.connect(sum);
-
-        last = sum;
-        continue;
-      }
-
-    }
-
-
-    last.connect(gainNode);
-    const destination = destinationNode || masterGain;
-    gainNode.connect(destination);
-
-
-
-
+    gainNode.connect(destinationNode || masterGain);
 
     oscillator.start();
     oscillator.stop(ctx.currentTime + 1.5);

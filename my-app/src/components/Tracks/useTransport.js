@@ -1,8 +1,7 @@
 // src/components/audio/useTransport.js
 import { useRef, useEffect, useCallback, useState } from "react";
+import { getTrackLength } from "./trackUtils";
 
-// Keep this in sync with TrackSection's BASE_STRIP_SECONDS
-const BASE_STRIP_SECONDS = 10;
 // Keep timeline playable/recordable even when there are no clips yet
 const MIN_TIMELINE_SECONDS = 120;
 
@@ -103,8 +102,7 @@ export function useTransport({
     if (!tracksNow.length) return;
 
     // Use the zoom of the first track as the global zoom
-    const zoomNow = (tracksNow[0] && tracksNow[0].zoom) || 1;
-    const trackLength = BASE_STRIP_SECONDS / zoomNow;
+    const trackLength = getTrackLength(tracksNow[0]);
 
     // Get current head position from the first track (they should all be in sync)
     // IMPORTANT: headPos is clamped to the visible window and is NOT a reliable absolute time.
@@ -151,8 +149,7 @@ export function useTransport({
       }
 
 
-      const zoomInner = (tracksInner[0] && tracksInner[0].zoom) || 1;
-      const trackLengthInner = BASE_STRIP_SECONDS / zoomInner;
+      const trackLengthInner = getTrackLength(tracksInner[0]);
 
       const now = performance.now();
       const elapsed = (now - transportStartWallTimeRef.current) / 1000;

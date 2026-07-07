@@ -2,6 +2,15 @@
 import { useRef, useState, useEffect } from "react";
 import { drawGenericWave } from "../audio/drawUtils";
 import { useTransport } from "./useTransport";
+import {
+  getTrackLength,
+  willOverlap,
+  makeClipId,
+  makeTrack,
+  DEFAULT_TRACK_HEIGHT_PX,
+  MIN_TRACK_HEIGHT_PX,
+  MAX_TRACK_HEIGHT_PX,
+} from "./trackUtils";
 
 /**
  * Track model + drawing + mouse interaction (head + clip drag)
@@ -16,36 +25,7 @@ import { useTransport } from "./useTransport";
  */
 export function useTrackModel(options = {}) {
   // ---------- State ----------
-  const [tracks, setTracks] = useState([
-    {
-      id: 0,
-      name: "0",
-      zoom: 1, //fix later
-      headPos: 0, // 0..1 across the strip
-      clips: [], // [{ id, url, duration, startTime, image }]
-      // legacy fields (kept so old code doesn’t crash if it still references them):
-      effects: [],
-      isMuted: false,
-      isSolo: false,
-      isRecEnabled: false,
-      inputDeviceId: null,
-      hasRecording: false,
-      recordingUrl: null,
-      recordingDuration: 0,
-      tapeHeadPos: 0,
-      recordingImage: null,
-      clipStartPos: 0,
-          instrumentType: "guitar",
-      tapeFx: { saturation: 0, wowFlutter: 0, eqRollOff: 0, hiss: 0 },
-      heightPx: 84,
-    },
-  ]);
-
-  // Track UI sizing
-  const BASE_STRIP_SECONDS = 10;
-  const DEFAULT_TRACK_HEIGHT_PX = 84; // matches current feel
-  const MIN_TRACK_HEIGHT_PX = 34;
-  const MAX_TRACK_HEIGHT_PX = 220;
+  const [tracks, setTracks] = useState([makeTrack(0)]);
 
   const [nextTrackId, setNextTrackId] = useState(1);
   const [trackCountLock, setTrackCountLock] = useState(null); // null = unlocked, number = fixed count
@@ -89,26 +69,6 @@ export function useTrackModel(options = {}) {
     if (el && el.style) el.style.cursor = cursor;
   };
 
-  const getTrackLength = (track) => {
-    const zoom = track.zoom || 1;
-    return BASE_STRIP_SECONDS / zoom;
-  };
-
-  const clipsOverlap = (a, b) => {
-    const aStart = a.startTime;
-    const aEnd = a.startTime + a.duration;
-    const bStart = b.startTime;
-    const bEnd = b.startTime + b.duration;
-    return Math.max(aStart, bStart) < Math.min(aEnd, bEnd);
-  };
-
-  const willOverlap = (clips, candidate, ignoreId = null) => {
-    return (clips || []).some((c) => {
-      if (ignoreId && c.id === ignoreId) return false;
-      return clipsOverlap(c, candidate);
-    });
-  };
-
   const syncHeadPosAllTracks = (headPos) => {
     setTracks((prev) =>
       prev.map((track) => ({
@@ -130,30 +90,7 @@ export function useTrackModel(options = {}) {
         window.alert(`This session is locked to ${lock} tracks.`);
         return prev;
       }
-      return [
-        ...prev,
-      {
-        id: nextTrackId,
-        name: String(id),
-        zoom: globalZoom,
-        headPos: 0,
-        clips: [],
-        effects: [],
-        isMuted: false,
-        isSolo: false,
-        isRecEnabled: false,
-        inputDeviceId: null,
-        hasRecording: false,
-        recordingUrl: null,
-        recordingDuration: 0,
-        tapeHeadPos: 0,
-        recordingImage: null,
-        clipStartPos: 0,
-        heightPx: DEFAULT_TRACK_HEIGHT_PX,
-              instrumentType: "guitar",
-        tapeFx: { saturation: 0, wowFlutter: 0.0, eqRollOff: 0, hiss: 0 },
-      },
-    ];
+      return [...prev, makeTrack(id, { zoom: globalZoom })];
     });
     setNextTrackId((id) => id + 1);
   };
@@ -363,23 +300,18 @@ export function useTrackModel(options = {}) {
         return;
       }
 
-      const makeId =
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? () => crypto.randomUUID()
-          : () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
       const baseOffset = clickedClip.offset || 0;
 
       const leftClip = {
         ...clickedClip,
-        id: makeId(),
+        id: makeClipId(),
         duration: localSplit,
         offset: baseOffset,
       };
 
       const rightClip = {
         ...clickedClip,
-        id: makeId(),
+        id: makeClipId(),
         startTime: splitAbsTime,
         duration: clickedClip.duration - localSplit,
         offset: baseOffset + localSplit,
@@ -436,10 +368,6 @@ export function useTrackModel(options = {}) {
 
       const clipStart = clickedClip.startTime;
       const clipEnd = clickedClip.startTime + clickedClip.duration;
-
-      // Edge detection threshold: ~10px worth of time (feels like "grab handle")
-      const secondsPerPixel = visibleSeconds / Math.max(1, rect.width);
-      const EDGE_SECONDS = Math.max(0.05, secondsPerPixel * 10);
 
       const nearLeft = Math.abs(clickTime - clipStart) <= EDGE_SECONDS;
       const nearRight = Math.abs(clickTime - clipEnd) <= EDGE_SECONDS;

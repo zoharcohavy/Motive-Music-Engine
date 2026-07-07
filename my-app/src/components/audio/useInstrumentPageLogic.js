@@ -3,6 +3,7 @@ import { useAudioEngine } from "./Engines/useAudioEngine";
 import { useRoom } from "../Rooms/useRoom";
 import { useTrackModel } from "../Tracks/useTrackModel";
 import { useRecording } from "./Engines/useRecording";
+import { willOverlap, makeClipId, makeTrack } from "../Tracks/trackUtils";
 import { API_BASE } from "./constants";
 
 
@@ -424,6 +425,8 @@ export function useInstrumentPageLogic() {
     const isRecordingLocked = room.isRoomLocked || recording.isGlobalRecording;
 
   // --- Keyboard handlers for the PianoKeyboard component ---
+  // Mouse-down and mouse-enter (glissando) behave identically: flash the
+  // key/pad and play it through the selected track's FX and bus.
   const handleKeyMouseDown = (key) => {
     if (!key) return;
 
@@ -442,10 +445,9 @@ export function useInstrumentPageLogic() {
     const sel = tracksNow.find((t) => t.id === trackModel.selectedTrackId);
     const selectedFx = sel?.effects || [];
 
-    // Play piano note OR drum sample (through selected track FX)
+    // Play piano note OR drum sample (through selected track FX) AND route into selected track bus
     const dest = audioEngine.getOrCreateTrackBus?.(trackModel.selectedTrackId);
 
-    // Play piano note OR drum sample (through selected track FX) AND route into selected track bus
     if (hasSample && audioEngine.playSample) {
       audioEngine.playSample(key.sampleUrl, {
         source: "local",
@@ -459,8 +461,6 @@ export function useInstrumentPageLogic() {
         destinationNode: dest,
       });
     }
-
-
 
     // Clear highlight shortly after
     setTimeout(() => {
@@ -470,49 +470,7 @@ export function useInstrumentPageLogic() {
     }, 200);
   };
 
-  const handleKeyMouseEnter = (key) => {
-    if (!key) return;
-
-    const hasFreq = typeof key.freq === "number";
-    const hasSample = typeof key.sampleUrl === "string";
-
-    if (!hasFreq && !hasSample) return;
-
-    trackModel.setActiveKeyIds((prev) =>
-      prev.includes(key.id) ? prev : [...prev, key.id]
-    );
-
-    // Only hear FX from the currently selected track
-    const tracksNow = trackModel.tracksRef?.current || [];
-    const sel = tracksNow.find((t) => t.id === trackModel.selectedTrackId);
-    const selectedFx = sel?.effects || [];
-
-    // Play through selected track FX
-    const dest = audioEngine.getOrCreateTrackBus?.(trackModel.selectedTrackId);
-
-    // Play piano note OR drum sample (through selected track FX) AND route into selected track bus
-    if (hasSample && audioEngine.playSample) {
-      audioEngine.playSample(key.sampleUrl, {
-        source: "local",
-        effectsOverride: selectedFx,
-        destinationNode: dest,
-      });
-    } else if (hasFreq) {
-      audioEngine.playNote(key.freq, {
-        source: "local",
-        effectsOverride: selectedFx,
-        destinationNode: dest,
-      });
-    }
-
-
-
-    setTimeout(() => {
-      trackModel.setActiveKeyIds((prev) =>
-        prev.filter((id) => id !== key.id)
-      );
-    }, 200);
-  };
+  const handleKeyMouseEnter = handleKeyMouseDown;
 
   // ===== Upload an existing audio file and place it on a track as a clip =====
   const getAudioDurationSeconds = (file) =>
@@ -537,17 +495,6 @@ export function useInstrumentPageLogic() {
       }
     });
 
-  const clipsOverlap = (a, b) => {
-    const aStart = a.startTime || 0;
-    const aEnd = (a.startTime || 0) + (a.duration || 0);
-    const bStart = b.startTime || 0;
-    const bEnd = (b.startTime || 0) + (b.duration || 0);
-    return Math.max(aStart, bStart) < Math.min(aEnd, bEnd);
-  };
-
-  const willOverlap = (clips, candidate) =>
-    (clips || []).some((c) => clipsOverlap(c, candidate));
-
   const handleTrackUpload = async (trackId, file) => {
     if (!file) return;
 
@@ -562,10 +509,7 @@ export function useInstrumentPageLogic() {
       typeof trackModel.headTimeSeconds === "number" ? trackModel.headTimeSeconds : 0;
 
     const newClip = {
-      id:
-        typeof crypto !== "undefined" && crypto.randomUUID
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      id: makeClipId(),
       url: `${API_BASE}/storage/${filename}`,
       duration,
       startTime: clipStartTime,
@@ -592,18 +536,8 @@ export function useInstrumentPageLogic() {
     const newTrackId = trackModel.nextTrackId;
 
     const newTrack = {
-      id: newTrackId,
-      name: String(newTrackId),
-      zoom: trackModel.globalZoom,
-      headPos: 0,
+      ...makeTrack(newTrackId, { zoom: trackModel.globalZoom }),
       clips: [newClip],
-      hasRecording: false,
-      recordingUrl: null,
-      recordingDuration: 0,
-      tapeHeadPos: 0,
-      recordingImage: null,
-      clipStartPos: 0,
-      heightPx: trackModel.DEFAULT_TRACK_HEIGHT_PX,
     };
 
     trackModel.setTracks((prev) => [...prev, newTrack]);

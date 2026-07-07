@@ -1,6 +1,7 @@
 // src/components/audio/Engines/useRecording.js
 import { useRef, useState, useEffect } from "react";
 import { API_BASE } from "../constants";
+import { getTrackLength } from "../../Tracks/trackUtils";
 
 /**
  * Recording hook:
@@ -85,14 +86,7 @@ export function useRecording({
   const pendingRoomStopsRef = useRef(0);
   const stopRoomResolveRef = useRef(null);
 
-  const BASE_STRIP_SECONDS = 10;
-
   const tempRecClipIdFor = (trackId) => `__REC_LIVE__${trackId}`;
-
-  const getTrackLength = (track) => {
-    const zoom = track.zoom || 1;
-    return BASE_STRIP_SECONDS / zoom;
-  };
 
   const getCurrentHeadAbsSeconds = () => {
     const tracksNow = tracksRef.current || [];
