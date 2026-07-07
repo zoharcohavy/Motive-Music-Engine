@@ -32,7 +32,7 @@ Frontend:
 React
 Web Audio API
 Canvas (waveform rendering)
-Vite
+Create React App (react-scripts)
 
 Backend:
 Node.js
@@ -84,14 +84,10 @@ server/.env
 Example:
 
 PORT=8080
-MONGO_URI=your_mongodb_connection_string_here
 
 
-⚠️ The .env file is required to run the backend, but is not
-included in the repo for security reasons.
-
-If you don’t need database features yet, the app will still run
-without MongoDB for basic audio + room functionality.
+The .env file is optional — if it's missing, the backend
+defaults to port 8080.
 
 5. Start the Servers
 Start the backend:
@@ -104,12 +100,10 @@ Server running on port 8080
 
 Start the frontend:
 cd ../my-app
-npm run dev
+npm start
 
-Vite will print a local URL, usually:
-http://localhost:5173
-
-Open that URL in your browser.
+The dev server opens the app automatically at:
+http://localhost:3000
 
 🌐 Using Collaborative Rooms
 To collaborate between multiple computers:
