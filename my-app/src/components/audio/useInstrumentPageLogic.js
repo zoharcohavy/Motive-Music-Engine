@@ -4,6 +4,7 @@ import { useRoom } from "../Rooms/useRoom";
 import { useTrackModel } from "../Tracks/useTrackModel";
 import { useRecording } from "./Engines/useRecording";
 import { willOverlap, makeClipId, makeTrack } from "../Tracks/trackUtils";
+import { mixdownRoomSession } from "./Engines/mixdown";
 import { API_BASE } from "./constants";
 
 
@@ -52,11 +53,18 @@ export function useInstrumentPageLogic() {
       engine.playRemoteNote(freq, { waveform, effects: effects ?? effect });
     },
 
-    onRoomRecordStart: (sessionFolder) => {
+    onRemoteSample: ({ sampleUrl }) => {
+      // A friend hit a drum pad / sampler key — play it locally too
+      audioEngineRef.current?.playSample?.(sampleUrl, { source: "remote" });
+    },
+
+    onRoomRecordStart: (sessionFolder, syncMeta) => {
       const uiBlockedNow = Boolean(recordGuard) || Boolean(room.isRoomModalOpen);
       if (uiBlockedNow) return;
 
-      recordingRef.current?.startRoomArmedTracks(sessionFolder, usernameRef.current);
+      // syncMeta carries the shared record-start timestamp + clock offset so
+      // this machine's stems can be aligned with everyone else's at mixdown.
+      recordingRef.current?.startRoomArmedTracks(sessionFolder, usernameRef.current, syncMeta);
 
       // NEW: auto-start transport so Play flips to Pause while room recording
       if (!transportPlayingRef.current && typeof transportPlayRef.current === "function") {
@@ -75,6 +83,15 @@ export function useInstrumentPageLogic() {
       // double-toggling if another path already paused it.
       if (transportPlayingRef.current && typeof transportPlayRef.current === "function") {
         transportPlayRef.current();
+      }
+
+      // Combined take: once our own stems are uploaded, pull every user's
+      // stems for this session, align them on the shared timeline, and save
+      // one mixed WAV locally on this machine.
+      if (sessionFolder) {
+        Promise.resolve(done)
+          .then(() => mixdownRoomSession(sessionFolder))
+          .catch((e) => console.warn("[mixdown] failed:", e?.message || e));
       }
 
       return done;

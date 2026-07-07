@@ -719,9 +719,18 @@ export function useAudioEngine(options = {}) {
 
     void handle;
 
-
-    // OPTIONAL: broadcast drums later if desired
-    void _source; // keep signature for future use
+    // Broadcast drum/sampler hits to the room so friends hear them too.
+    // Skip data: URLs (custom pad samples live only in this browser's
+    // localStorage and would be huge to send per hit).
+    if (
+      _source === "local" &&
+      roomStatus === "connected" &&
+      typeof sendRoomMessage === "function" &&
+      typeof sampleUrl === "string" &&
+      !sampleUrl.startsWith("data:")
+    ) {
+      sendRoomMessage({ type: "sample", sampleUrl });
+    }
   };
 
   // Play a note coming from a remote user

@@ -6,6 +6,7 @@ const ROOM_STORAGE_KEY = "motiveSMusic.roomSession";
 
 export function useRoom({
   onRemoteNote,
+  onRemoteSample,
   onRoomRecordStart,
   onRoomRecordStop,
   onPrecheckRequest,
@@ -64,6 +65,11 @@ export function useRoom({
   const roomSessionFolderRef = useRef(null);
   const roomRecordStartAtMsRef = useRef(null);
 
+  // NTP-style clock sync with the server (sampled via the ping loop).
+  // offsetMs = serverClock - localClock; we keep the lowest-RTT sample
+  // since it has the least one-way-latency error.
+  const clockSyncRef = useRef({ offsetMs: 0, rttMs: Infinity });
+
 
   const sendRoomMessage = useCallback(
     (msg) => {
@@ -111,10 +117,14 @@ export function useRoom({
       }
 
 
-      // Ignore our own echoes ONLY for note messages.
+      // Ignore our own echoes ONLY for note/sample messages.
       // For record_countdown / record_start / record_stop, we MUST process the server message
       // even if it originated from us, so everyone's UI and transport stays in sync.
-      if (msg.type === "note" && msg.userId && msg.userId === roomUserIdRef.current) {
+      if (
+        (msg.type === "note" || msg.type === "sample") &&
+        msg.userId &&
+        msg.userId === roomUserIdRef.current
+      ) {
         return;
       }
 
@@ -129,6 +139,12 @@ export function useRoom({
             effects: msg.effects,
             effect: msg.effect, // backward compatibility
           });
+          break;
+        }
+
+        case "sample": {
+          if (typeof msg.sampleUrl !== "string" || !msg.sampleUrl) return;
+          onRemoteSample?.({ sampleUrl: msg.sampleUrl });
           break;
         }
 
@@ -147,6 +163,27 @@ export function useRoom({
         case "precheck_response": {
           if (typeof msg.requestId === "string") {
             onPrecheckResponse?.(msg);
+          }
+          break;
+        }
+
+        case "time_pong": {
+          const sentAt = Number(msg.clientSentAt);
+          const serverNow = Number(msg.serverNow);
+          if (!Number.isFinite(sentAt) || !Number.isFinite(serverNow)) break;
+
+          const now = Date.now();
+          const rttMs = now - sentAt;
+          if (rttMs < 0) break;
+
+          // serverNow was stamped ~rtt/2 after we sent, so the server clock
+          // "now" is serverNow + rtt/2; offset = that - our now.
+          const offsetMs = serverNow + rttMs / 2 - now;
+
+          // Prefer the cleanest (lowest-RTT) sample; allow small regressions
+          // so a one-off lucky packet doesn't pin a stale offset forever.
+          if (rttMs <= clockSyncRef.current.rttMs + 15) {
+            clockSyncRef.current = { offsetMs, rttMs };
           }
           break;
         }
@@ -200,7 +237,12 @@ export function useRoom({
           const sf = msg.sessionFolder || null;
 
           roomSessionFolderRef.current = sf;
-          roomRecordStartAtMsRef.current = Date.now(); // server sets recordStartAtMs separately via record_status heartbeat
+          // Keep the server-scheduled start time from record_countdown if we
+          // have it (shared timeline for stem alignment); local arrival time
+          // is only a fallback. record_status heartbeats refine it later.
+          if (!roomRecordStartAtMsRef.current) {
+            roomRecordStartAtMsRef.current = Date.now();
+          }
 
           setRoomIsRecording(true);
           setRoomRecordPhase("recording");
@@ -208,7 +250,10 @@ export function useRoom({
           // Every client must start exactly once
           if (!localRoomRecordingRef.current) {
             localRoomRecordingRef.current = true;
-            onRoomRecordStart?.(sf);
+            onRoomRecordStart?.(sf, {
+              recordStartAtServerMs: roomRecordStartAtMsRef.current,
+              getServerClockOffsetMs: () => clockSyncRef.current.offsetMs,
+            });
           }
           break;
         }
@@ -284,7 +329,10 @@ export function useRoom({
 
             if (!localRoomRecordingRef.current) {
               localRoomRecordingRef.current = true;
-              onRoomRecordStart?.(roomSessionFolderRef.current || null);
+              onRoomRecordStart?.(roomSessionFolderRef.current || null, {
+                recordStartAtServerMs: roomRecordStartAtMsRef.current,
+                getServerClockOffsetMs: () => clockSyncRef.current.offsetMs,
+              });
             }
             return;
           }
@@ -322,6 +370,7 @@ export function useRoom({
       }
     }, [
       onRemoteNote,
+      onRemoteSample,
       onRoomRecordStart,
       onRoomRecordStop,
       onPrecheckRequest,
@@ -493,8 +542,9 @@ export function useRoom({
     if (roomStatus !== "connected") return;
 
     const id = setInterval(() => {
-      // ping triggers server to respond with occupancy + record_status
-      sendRoomMessage({ type: "ping", username });
+      // ping triggers occupancy + record_status, and clientSentAt lets the
+      // server answer with a time_pong for clock sync
+      sendRoomMessage({ type: "ping", username, clientSentAt: Date.now() });
     }, 2000);
 
     return () => clearInterval(id);
@@ -520,6 +570,7 @@ export function useRoom({
   return {
     roomId,
     username,
+    getServerClockOffsetMs: () => clockSyncRef.current.offsetMs,
     roomStatus,
     roomUsernames,
     isRoomModalOpen,

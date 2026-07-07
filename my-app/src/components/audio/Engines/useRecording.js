@@ -37,6 +37,10 @@ export function useRecording({
   // Room session upload metadata
   const roomSessionFolderRef = useRef(null);
   const roomUsernameRef = useRef("Anonymous");
+  // How many ms after the room's shared record-start timestamp THIS machine
+  // actually began recording (clock-sync corrected). Uploaded with each stem
+  // so mixdown can align all stems on one timeline.
+  const roomStartDeltaMsRef = useRef(0);
 
   const roomKeepAliveRef = useRef(new Map()); 
   const makeKeepAliveCombinedStream = (baseStream, trackId) => {
@@ -248,6 +252,8 @@ export function useRecording({
       formData.append("roomSessionFolder", sessionFolder || roomId);
       formData.append("username", username || "Anonymous");
       formData.append("trackName", safeTrackName);
+      // Stem alignment offset for mixdown (ms after shared record start)
+      formData.append("startDeltaMs", String(Math.round(roomStartDeltaMsRef.current || 0)));
 
       // Append the file LAST
       formData.append("audio", blob, `${safeTrackName}.webm`);
@@ -480,7 +486,7 @@ export function useRecording({
   };
 
   // ---------- Room Record (armed tracks only, plus uploads into shared folder) ----------
-  const startRoomArmedTracks = (sessionFolder, username) => {
+  const startRoomArmedTracks = (sessionFolder, username, syncMeta = {}) => {
     const ctx = getAudioContext();
     if (!ctx) return;
 
@@ -497,6 +503,17 @@ export function useRecording({
     // store for uploads
     roomSessionFolderRef.current = sf;
     roomUsernameRef.current = username || "Anonymous";
+
+    // Stem alignment: how far past the room's shared start timestamp are we
+    // actually starting? Correct our clock with the server offset so every
+    // machine measures against the same timeline.
+    const { recordStartAtServerMs = null, getServerClockOffsetMs = null } = syncMeta;
+    const clockOffsetMs =
+      typeof getServerClockOffsetMs === "function" ? Number(getServerClockOffsetMs()) || 0 : 0;
+    const localNowOnServerClock = Date.now() + clockOffsetMs;
+    roomStartDeltaMsRef.current = Number.isFinite(recordStartAtServerMs)
+      ? Math.max(0, localNowOnServerClock - recordStartAtServerMs)
+      : 0;
 
     // Snapshot viewport + head time (prevents jump)
     const viewStartNow = (typeof getViewStartTime === "function" ? getViewStartTime() : 0) || 0;

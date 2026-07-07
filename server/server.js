@@ -213,6 +213,24 @@ app.post("/api/recordings/upload", upload.single("audio"), (req, res) => {
   // prove it's really on disk
   console.log("UPLOAD saved path exists?", fs.existsSync(req.file.path));
 
+  // Room stems: persist the stem's start offset (ms after the shared
+  // record-start timestamp) into session.json so clients can align all
+  // stems on one timeline when mixing down.
+  const sessionFolder = (req.body?.roomSessionFolder || "").trim();
+  const startDeltaMs = Number(req.body?.startDeltaMs);
+  if (sessionFolder && Number.isFinite(startDeltaMs)) {
+    try {
+      const dir = path.join(recordingsDir, sanitizeRoomNameForFilename(sessionFolder));
+      const metaPath = path.join(dir, "session.json");
+      let meta = {};
+      try { meta = JSON.parse(fs.readFileSync(metaPath, "utf8")); } catch {}
+      meta[req.file.filename] = { startDeltaMs };
+      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+    } catch (e) {
+      console.warn("session.json write failed:", e);
+    }
+  }
+
   res.json({ success: true, filename: req.file.filename });
 });
 
@@ -356,6 +374,17 @@ wss.on("connection", (ws, roomName) => {
 
     // --- PING: client requests occupancy + record status ---
     if (msg && typeof msg === "object" && msg.type === "ping") {
+      // Clock sync: echo the client's send time with our wall clock so the
+      // client can estimate its offset from server time (NTP-style).
+      if (typeof msg.clientSentAt === "number" && ws.readyState === ws.OPEN) {
+        try {
+          ws.send(JSON.stringify({
+            type: "time_pong",
+            clientSentAt: msg.clientSentAt,
+            serverNow: Date.now(),
+          }));
+        } catch {}
+      }
       broadcastOccupancy(roomName);
       broadcastRecordStatus(roomName);
       return;
