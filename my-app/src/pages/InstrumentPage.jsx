@@ -12,6 +12,7 @@ import PianoKeyboard from "../components/audio/SoundBoards/PianoKeyboard";
 import DrumMachine from "../components/audio/SoundBoards/DrumMachine";
 
 import { KEYS, getKeyIndexForKeyboardChar } from "../components/audio/constants";
+import { makeTrack } from "../components/Tracks/trackUtils";
 import { useInstrumentHotkeys } from "../components/audio/SoundBoards/useInstrumentHotkeys";
 import { useDrumPadConfig } from "../components/audio/SoundBoards/useDrumPadConfig";
 import { usePersistedState } from "../components/ui/usePersistedState";
@@ -216,30 +217,10 @@ export default function InstrumentPage({ instrument }) {
   const isPortastudioMode = sessionTemplate === "portastudio";
 
   const makePortastudioTracks = () => {
-    const base = {
-      zoom: 1,
-      headPos: 0,
-      clips: [],
-      effects: [],
-      isMuted: false,
-      isSolo: false,
-      isRecEnabled: false,
-      inputDeviceId: null,
-      hasRecording: false,
-      recordingUrl: null,
-      recordingDuration: 0,
-      tapeHeadPos: 0,
-      recordingImage: null,
-      clipStartPos: 0,
-      heightPx: DEFAULT_TRACK_HEIGHT_PX,
-      tapeFx: { saturation: 0, wowFlutter: 0, eqRollOff: 0, hiss: 0 },
-    };
-
     const types = ["guitar", "bass", "drums", "guitar"];
 
     return types.map((instrumentType, i) => ({
-      ...base,
-      id: i,
+      ...makeTrack(i),
       name: String(i + 1),
       instrumentType,
     }));

@@ -788,14 +788,10 @@ const drawRoundedRect = (ctx, x, y, w, h, r) => {
       ctx.fillStyle = "#111";
       ctx.fillRect(0, 0, width, height);
 
-      const trackLength = getTrackLength(track);
-
 // ===============================
 // DRAW CLIPS (white outline)
 // ===============================
 if (track.clips && track.clips.length > 0) {
-  const trackLength = getTrackLength(track);
-
   track.clips.forEach((clip) => {
     const visibleSeconds = getTrackLength(track);
 
@@ -1001,10 +997,6 @@ if (track.clips && track.clips.length > 0) {
 
     changeZoom,
     moveClip,
-    handleTrackStripMouseDown,
-    handleTrackStripMouseMove,
-    handleTrackStripContextMenu,
-    stopDragging,
     mouse_interactions,
 
     handleGlobalPlay,

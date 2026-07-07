@@ -1,14 +1,9 @@
 import { useRef, useState } from "react";
 import AppModal from "../ui/AppModal";
+import { BASE_STRIP_SECONDS, getTrackLength } from "./trackUtils";
 
 
-const BASE_STRIP_SECONDS = 10;
 const MIN_TIMELINE_SECONDS = 120; // 2 minutes: makes Scroll usable on page load
-
-const getTrackLength = (track) => {
-  const zoom = track.zoom || 1;
-  return BASE_STRIP_SECONDS / zoom;
-};
 
 const getHeadSecondsForTrack = (track) => {
   const trackLength = getTrackLength(track);
@@ -132,19 +127,6 @@ export default function TrackSection({
     // Let React apply the viewStartTime update before starting transport/recording.
     window.requestAnimationFrame(() => fn());
   };
-
-
-  const zoom = globalZoom || (firstTrack?.zoom || 1);
-  const visibleSeconds = BASE_STRIP_SECONDS / (zoom || 1);
-
-  // percent across the visible window (0..1)
-  const head = Number.isFinite(headTimeSeconds) ? headTimeSeconds : 0;
-  const start = Number.isFinite(viewStartTime) ? viewStartTime : 0;
-  const frac = visibleSeconds > 0 ? (head - start) / visibleSeconds : 0;
-
-  // allow it to go slightly offscreen without exploding layout
-  const clamped = Math.max(-0.1, Math.min(1.1, frac));
-  const headLeftPercent = clamped * 100;
 
 
   const beginResizeControls = (e) => {
@@ -413,7 +395,15 @@ export default function TrackSection({
                     <button
                         type="button"
                         className="btn trackSection__deleteBtn"
-                        onClick={() => deleteTrack(track.id)}
+                        onClick={() => {
+                          const clipCount = (track.clips || []).length;
+                          if (clipCount > 0) {
+                            setConfirmDeleteClipCount(clipCount);
+                            setConfirmDeleteTrackId(track.id);
+                          } else {
+                            deleteTrack(track.id);
+                          }
+                        }}
                         title="Delete track"
                     >
                         ✕
@@ -460,12 +450,6 @@ export default function TrackSection({
 
 
 
-              <span className="trackSection__recTime">
-
-                {track.recordingDuration
-                  ? `${track.recordingDuration.toFixed(1)}s`
-                  : ""}
-              </span>
             </div>
 
             <div

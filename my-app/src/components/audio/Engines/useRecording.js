@@ -88,22 +88,6 @@ export function useRecording({
 
   const tempRecClipIdFor = (trackId) => `__REC_LIVE__${trackId}`;
 
-  const getCurrentHeadAbsSeconds = () => {
-    const tracksNow = tracksRef.current || [];
-    if (!tracksNow.length) return 0;
-
-    const viewStart =
-      typeof getViewStartTime === "function" ? (getViewStartTime() || 0) : 0;
-
-    const t0 = tracksNow[0];
-    const len = getTrackLength(t0) || 0;
-
-    // headPos is 0..1 within the current viewport; convert to absolute seconds
-    const hp = typeof t0.headPos === "number" ? t0.headPos : 0;
-    return viewStart + hp * len;
-  };
-
-
   // IMPORTANT:
   // Only trust getHeadTimeSeconds() if it agrees with what we are actually drawing.
   // Otherwise, derive from (viewStartTime + headPos * trackLength).

@@ -130,7 +130,7 @@ export function useInstrumentPageLogic() {
 
   
   // Aliases for recording-guard helpers (so we can use simple names below)
-  const { tracks, setTracks, headTimeSeconds } = trackModel;
+  const { tracks, setTracks } = trackModel;
 
   // --- Recording guard (blocks recording if ARMED tracks have clips to the right of tape-head) ---
   const [recordGuard, setRecordGuard] = useState(null);

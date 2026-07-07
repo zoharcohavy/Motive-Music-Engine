@@ -46,11 +46,7 @@ export const makeTrack = (id, { zoom = 1 } = {}) => ({
   instrumentType: "guitar",
   tapeFx: { saturation: 0, wowFlutter: 0, eqRollOff: 0, hiss: 0 },
   heightPx: DEFAULT_TRACK_HEIGHT_PX,
-  // legacy fields (kept so old code doesn’t crash if it still references them):
-  hasRecording: false,
-  recordingUrl: null,
-  recordingDuration: 0,
+  // tapeHeadPos mirrors headPos; useTransport and TrackSection still read it
+  // as a fallback when headPos is missing.
   tapeHeadPos: 0,
-  recordingImage: null,
-  clipStartPos: 0,
 });

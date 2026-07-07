@@ -113,17 +113,6 @@ export function useDrumPadConfig() {
     reader.readAsDataURL(file);
   }, [setPads]);
 
-  const FORBIDDEN_KEYS = new Set([" ", "enter"]); // space and enter are reserved globally
-
-  const normalizeChar = (key) => {
-    if (!key) return "";
-    const s = String(key).toLowerCase();
-    // Spacebar arrives as " " in e.key; Enter arrives as "Enter"
-    if (s === "enter") return "enter";
-    if (s === " ") return " ";
-    return s.length === 1 ? s : "";
-  };
-
   return {
     pads,
     setPads,
@@ -137,6 +126,5 @@ export function useDrumPadConfig() {
     setPadKey,
     setPadName,
     setPadSampleFile,
-    getCharForPadId,
   };
 }

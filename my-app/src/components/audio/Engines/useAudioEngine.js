@@ -8,14 +8,11 @@ export function useAudioEngine(options = {}) {
   const audioCtxRef = useRef(null);
   const analyserRef = useRef(null);
   const masterGainRef = useRef(null);
-  const recordDestRef = useRef(null);
   // NEW: per-track buses (mute/solo) + live input monitoring
   const trackBusRef = useRef(new Map()); // trackId -> { inputGain, outputGain, nodes }
   const liveInputRef = useRef(new Map()); // trackId -> { stream, sourceNode, lastEffectsKey, deviceId }
   const trackRecordDestRef = useRef(new Map()); // trackId -> MediaStreamDestination
 
-  const mediaRecorderRef = useRef(null);
-  const recordingChunksRef = useRef([]);
   const waveCanvasRef = useRef(null);
   const animationFrameRef = useRef(null);
 
@@ -769,9 +766,6 @@ export function useAudioEngine(options = {}) {
     audioCtxRef,
     analyserRef,
     masterGainRef,
-    recordDestRef,
-    mediaRecorderRef,
-    recordingChunksRef,
     waveCanvasRef,
 
     // state
