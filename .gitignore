@@ -8,3 +8,7 @@ server/node_modules/
 __MACOSX/
 server/recordings/
 server/storage/
+.vs/
+.vscode/
+.claude/
+*.zip
